@@ -16,8 +16,8 @@
     <!-- Discord.Net - Version 2.4.0 for .NET Framework -->
     <PackageReference Include="Discord.Net" Version="2.4.0" />
 
-    <!-- WebSocket Client (for RPC local) -->
-    <PackageReference Include="System.Net.WebSockets.Client" Version="4.3.2" />
+    <!-- WebSocket Sharp - Gives control over Origin header -->
+    <PackageReference Include="WebSocketSharp" Version="1.0.3-rc11" />
 
     <!-- JSON -->
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />

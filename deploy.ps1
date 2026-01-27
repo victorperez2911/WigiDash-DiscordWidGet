@@ -91,8 +91,7 @@ $dependencies = @(
     "Discord.Net.Webhook.dll",
     "Newtonsoft.Json.dll",
     "System.Interactive.Async.dll",
-    "System.Net.WebSockets.Client.dll",
-    "System.Net.WebSockets.dll",
+    "websocket-sharp.dll",  # WebSocket library for RPC (fixes Origin header issue)
     "Microsoft.Bcl.AsyncInterfaces.dll",
     "System.Collections.Immutable.dll",
     "WigiDashWidgetFramework.dll"

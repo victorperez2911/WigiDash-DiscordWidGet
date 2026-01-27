@@ -9,8 +9,9 @@ namespace WigiDash.DiscordWidget.Actions
             switch (actionType?.ToLowerInvariant())
             {
                 case "voice_channel":
-                    // TODO: Implement VoiceChannelAction
-                    return null;
+                    var action = new VoiceChannelAction();
+                    action.SetContext(context);
+                    return action;
 
                 case "soundboard":
                     // TODO: Implement SoundboardAction

@@ -289,6 +289,51 @@ namespace WigiDash.DiscordWidget.Authentication
             response.OutputStream.Close();
         }
 
+        public async Task<AuthenticationResult> RefreshTokenAsync(string refreshToken)
+        {
+            try
+            {
+                var parameters = new Dictionary<string, string>
+                {
+                    ["client_id"] = DiscordConfig.CLIENT_ID,
+                    ["grant_type"] = "refresh_token",
+                    ["refresh_token"] = refreshToken
+                };
+
+                var content = new FormUrlEncodedContent(parameters);
+                var response = await _httpClient.PostAsync(DiscordConfig.OAUTH_TOKEN_URL, content);
+
+                var responseBody = await response.Content.ReadAsStringAsync();
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    return new AuthenticationResult
+                    {
+                        Success = false,
+                        Error = $"HTTP {response.StatusCode}: {responseBody}"
+                    };
+                }
+
+                var tokenResponse = JsonConvert.DeserializeObject<TokenResponse>(responseBody);
+
+                return new AuthenticationResult
+                {
+                    Success = true,
+                    AccessToken = tokenResponse.AccessToken,
+                    RefreshToken = tokenResponse.RefreshToken ?? refreshToken, // Some APIs don't return new refresh token
+                    ExpiresIn = tokenResponse.ExpiresIn
+                };
+            }
+            catch (Exception ex)
+            {
+                return new AuthenticationResult
+                {
+                    Success = false,
+                    Error = ex.Message
+                };
+            }
+        }
+
         private class TokenResponse
         {
             [JsonProperty("access_token")]

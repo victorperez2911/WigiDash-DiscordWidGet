@@ -52,25 +52,11 @@ namespace WigiDash.DiscordWidget
                     return WidgetError.CUSTOM_ERROR;
                 }
 
-                // Log successful load
-                WidgetManager?.WriteLogMessage(
-                    null,
-                    LogLevel.INFO,
-                    "Discord Widget loaded successfully",
-                    $"[Discord Widget] Loaded from: {resourcePath}"
-                );
-
                 return WidgetError.NO_ERROR;
             }
             catch (Exception ex)
             {
                 LastErrorMessage = $"Load failed: {ex.Message}";
-                WidgetManager?.WriteLogMessage(
-                    null,
-                    LogLevel.ERROR,
-                    "Discord Widget load failed",
-                    $"[Discord Widget] Error: {ex}"
-                );
                 return WidgetError.CUSTOM_ERROR;
             }
         }
@@ -88,26 +74,14 @@ namespace WigiDash.DiscordWidget
                         {
                             instance.Dispose();
                         }
-                        catch (Exception ex)
+                        catch
                         {
-                            WidgetManager?.WriteLogMessage(
-                                null,
-                                LogLevel.WARN,
-                                "Instance disposal warning",
-                                $"[Discord Widget] Failed to dispose instance {instance.Guid}: {ex.Message}"
-                            );
+                            // Silent fail - widget is being unloaded anyway
                         }
                     }
 
                     _instances.Clear();
                 }
-
-                WidgetManager?.WriteLogMessage(
-                    null,
-                    LogLevel.INFO,
-                    "Discord Widget unloaded",
-                    "[Discord Widget] All instances disposed"
-                );
 
                 return WidgetError.NO_ERROR;
             }
@@ -187,12 +161,6 @@ namespace WigiDash.DiscordWidget
             catch (Exception ex)
             {
                 LastErrorMessage = $"Failed to remove instance: {ex.Message}";
-                WidgetManager?.WriteLogMessage(
-                    null,
-                    LogLevel.ERROR,
-                    "Instance removal failed",
-                    $"[Discord Widget] Error removing instance {instanceGuid}: {ex}"
-                );
                 return false;
             }
         }

@@ -85,6 +85,23 @@ Antes de usar, você precisa:
 public const string CLIENT_ID = "SEU_CLIENT_ID_AQUI";
 ```
 
+### Logo da Aplicação
+
+O logo da aplicação Discord (`discord_app_icon.png`) deve ser:
+
+- **Tamanho:** 512x512 pixels (recomendação Discord)
+- **Formato:** PNG com fundo transparente ou opaco
+- **Localização:** Raiz do projeto
+
+**Como atualizar:**
+
+1. Substitua `discord_app_icon.png` na raiz do projeto
+2. Faça upload no Discord Developer Portal (seção "App Icon")
+
+**Script auxiliar:**
+
+- `create_logo.ps1` - Gera um logo padrão (não sobrescreve se já existir customizado)
+
 ## 📁 Estrutura do Projeto
 
 ```

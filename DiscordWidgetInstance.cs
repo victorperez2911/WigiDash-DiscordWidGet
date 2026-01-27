@@ -26,7 +26,7 @@ namespace WigiDash.DiscordWidget
 
         // Discord Managers
         private DiscordGatewayManager _gatewayManager;
-        private DiscordRPCManager _rpcManager;
+        // RPC is now global singleton (GlobalRPCManager)
         private DiscordRESTClient _restClient;
 
         // Rendering
@@ -37,8 +37,8 @@ namespace WigiDash.DiscordWidget
         private IActionHandler _currentAction;
         private string _currentActionType;
 
-        // Settings
-        private string _accessToken;
+        // Settings (token is now global, not per-instance)
+        // private string _accessToken; // Removed - now using GlobalAuthManager
 
         // IWidgetInstance properties
         public IWidgetObject WidgetObject => _widgetObject;
@@ -63,8 +63,8 @@ namespace WigiDash.DiscordWidget
             _renderer = new BitmapRenderer();
             _imageCache = new ImageCache(resourcePath);
 
-            // Load settings
-            LoadSettings();
+            // Load local settings (action type, etc.) - auth is now global
+            LoadLocalSettings();
 
             // Initialize with default action if not set
             if (string.IsNullOrEmpty(_currentActionType))
@@ -75,7 +75,73 @@ namespace WigiDash.DiscordWidget
             // Create initial bitmap
             UpdateBitmap(CreateInitialBitmap());
 
+            // If already authenticated globally, initialize Discord in background
+            if (GlobalAuthManager.IsAuthenticated)
+            {
+                Task.Run(async () =>
+                {
+                    try
+                    {
+                        await InitializeDiscordAsync();
+                        await RegenerateBitmapAsync();
+                        Log("Discord connections auto-initialized from global token", LogLevel.INFO);
+                    }
+                    catch (Exception ex)
+                    {
+                        Log($"Error auto-initializing Discord: {ex.Message}", LogLevel.ERROR);
+                    }
+                });
+            }
+
             Log("Discord Widget instance created", LogLevel.INFO);
+        }
+
+        public bool IsAuthenticated()
+        {
+            return GlobalAuthManager.IsAuthenticated;
+        }
+
+        public bool IsRPCConnected()
+        {
+            return GlobalRPCManager.IsConnected && GlobalRPCManager.IsAuthorized;
+        }
+
+        public void Logout()
+        {
+            try
+            {
+                FileLogger.Log("DiscordWidgetInstance: Performing logout...");
+
+                // Clear global authentication
+                GlobalAuthManager.ClearTokens();
+
+                // Disconnect RPC
+                GlobalRPCManager.Logout();
+
+                // Dispose Gateway and REST (instance-specific)
+                _gatewayManager?.Dispose();
+                _restClient?.Dispose();
+                _gatewayManager = null;
+                _restClient = null;
+
+                // Dispose current action
+                if (_currentAction != null)
+                {
+                    _currentAction.Dispose();
+                    _currentAction = null;
+                }
+
+                _isInitialized = false;
+
+                // Update bitmap to show disconnected state
+                UpdateBitmap(CreateInitialBitmap());
+
+                Log("Logout complete", LogLevel.INFO);
+            }
+            catch (Exception ex)
+            {
+                Log($"Error during logout: {ex.Message}", LogLevel.ERROR);
+            }
         }
 
         public void RequestUpdate()
@@ -142,12 +208,11 @@ namespace WigiDash.DiscordWidget
             try
             {
                 // Disconnect Discord managers to save resources
+                // Note: RPC is global singleton, so we don't dispose it here
                 _gatewayManager?.Dispose();
-                _rpcManager?.Dispose();
                 _restClient?.Dispose();
 
                 _gatewayManager = null;
-                _rpcManager = null;
                 _restClient = null;
 
                 _isInitialized = false;
@@ -166,8 +231,8 @@ namespace WigiDash.DiscordWidget
 
             try
             {
-                // Reinitialize if we have a token
-                if (!string.IsNullOrEmpty(_accessToken))
+                // Reinitialize if we have a global token
+                if (GlobalAuthManager.IsAuthenticated)
                 {
                     Task.Run(async () =>
                     {
@@ -193,18 +258,25 @@ namespace WigiDash.DiscordWidget
 
                 if (result.Success)
                 {
-                    _accessToken = result.AccessToken;
+                    // Save token GLOBALLY (shared across all instances)
+                    GlobalAuthManager.SetTokens(result.AccessToken, result.RefreshToken, result.ExpiresIn);
 
-                    // Save token (encrypted)
-                    SaveSettings();
+                    Log("Authentication successful - token saved globally", LogLevel.INFO);
 
-                    // Initialize Discord connections
-                    await InitializeDiscordAsync();
-
-                    // Regenerate bitmap
-                    await RegenerateBitmapAsync();
-
-                    Log("Authentication successful", LogLevel.INFO);
+                    // Initialize Discord connections in background (don't await)
+                    Task.Run(async () =>
+                    {
+                        try
+                        {
+                            await InitializeDiscordAsync();
+                            await RegenerateBitmapAsync();
+                            Log("Discord connections initialized in background", LogLevel.INFO);
+                        }
+                        catch (Exception ex)
+                        {
+                            Log($"Error initializing Discord connections: {ex.Message}", LogLevel.ERROR);
+                        }
+                    });
                 }
 
                 return result;
@@ -233,7 +305,7 @@ namespace WigiDash.DiscordWidget
                 var context = new ActionContext
                 {
                     GatewayManager = _gatewayManager,
-                    RPCManager = _rpcManager,
+                    RPCManager = GlobalRPCManager.Instance,  // Use global singleton
                     RESTClient = _restClient,
                     Renderer = _renderer,
                     ImageCache = _imageCache,
@@ -245,10 +317,25 @@ namespace WigiDash.DiscordWidget
 
                 if (_currentAction != null)
                 {
-                    // Initialize action
+                    // Load action-specific settings
+                    var actionSettings = LoadActionSettings(_currentAction.ActionId);
+                    _currentAction.LoadSettings(actionSettings);
+
+                    // Initialize action asynchronously
                     Task.Run(async () =>
                     {
-                        await _currentAction.InitializeAsync(context);
+                        try
+                        {
+                            await _currentAction.InitializeAsync(context);
+                            Log($"Action '{actionType}' initialized", LogLevel.INFO);
+
+                            // Request initial bitmap render
+                            RequestUpdate();
+                        }
+                        catch (Exception ex)
+                        {
+                            Log($"Error initializing action: {ex.Message}", LogLevel.ERROR);
+                        }
                     });
                 }
 
@@ -258,6 +345,59 @@ namespace WigiDash.DiscordWidget
             {
                 Log($"Error loading action handler: {ex.Message}", LogLevel.ERROR);
                 return null;
+            }
+        }
+
+        private Dictionary<string, string> LoadActionSettings(string actionId)
+        {
+            var settings = new Dictionary<string, string>();
+            var mgr = _widgetObject.WidgetManager;
+
+            try
+            {
+                // Load all settings with prefix "action_{actionId}_"
+                var prefix = $"action_{actionId}_";
+
+                // Common settings
+                var settingKeys = new[] { "title", "guild_id", "guild_name", "channel_id", "channel_name", "icon_style" };
+
+                foreach (var key in settingKeys)
+                {
+                    var fullKey = prefix + key;
+                    if (mgr.LoadSetting(this, fullKey, out string value))
+                    {
+                        settings[key] = value;
+                    }
+                }
+
+                Log($"Loaded {settings.Count} settings for action '{actionId}'", LogLevel.INFO);
+            }
+            catch (Exception ex)
+            {
+                Log($"Error loading action settings: {ex.Message}", LogLevel.WARN);
+            }
+
+            return settings;
+        }
+
+        public void SaveActionSettings(string actionId, Dictionary<string, string> settings)
+        {
+            try
+            {
+                var mgr = _widgetObject.WidgetManager;
+                var prefix = $"action_{actionId}_";
+
+                foreach (var kvp in settings)
+                {
+                    var fullKey = prefix + kvp.Key;
+                    mgr.StoreSetting(this, fullKey, kvp.Value);
+                }
+
+                Log($"Saved {settings.Count} settings for action '{actionId}'", LogLevel.INFO);
+            }
+            catch (Exception ex)
+            {
+                Log($"Error saving action settings: {ex.Message}", LogLevel.ERROR);
             }
         }
 
@@ -289,76 +429,116 @@ namespace WigiDash.DiscordWidget
             }
         }
 
-        private void LoadSettings()
+        private void LoadLocalSettings()
         {
             try
             {
                 var mgr = _widgetObject.WidgetManager;
 
-                // Load action type
+                // Load action type (per-instance setting)
                 if (mgr.LoadSetting(this, "actionType", out string actionType))
                 {
                     _currentActionType = actionType;
                 }
 
-                // Load access token
-                if (mgr.LoadSetting(this, "accessToken", out string encryptedToken))
-                {
-                    _accessToken = TokenManager.DecryptToken(encryptedToken);
-                }
-
-                Log("Settings loaded", LogLevel.INFO);
+                Log("Local settings loaded", LogLevel.INFO);
             }
             catch (Exception ex)
             {
-                Log($"Error loading settings: {ex.Message}", LogLevel.WARN);
+                Log($"Error loading local settings: {ex.Message}", LogLevel.WARN);
             }
         }
 
-        private void SaveSettings()
+        private void SaveLocalSettings()
         {
-            var settings = new Dictionary<string, string>
+            try
             {
-                ["actionType"] = _currentActionType ?? "voice_channel",
-                ["accessToken"] = _accessToken ?? string.Empty
-            };
+                var mgr = _widgetObject.WidgetManager;
 
-            SaveWidgetSettings(settings);
+                // Save action type (per-instance setting)
+                mgr.StoreSetting(this, "actionType", _currentActionType ?? "voice_channel");
+
+                Log("Local settings saved", LogLevel.INFO);
+            }
+            catch (Exception ex)
+            {
+                Log($"Error saving local settings: {ex.Message}", LogLevel.ERROR);
+            }
         }
 
         private async Task InitializeDiscordAsync()
         {
-            if (_isInitialized || string.IsNullOrEmpty(_accessToken))
+            if (_isInitialized || !GlobalAuthManager.IsAuthenticated)
                 return;
+
+            var accessToken = GlobalAuthManager.AccessToken;
 
             try
             {
                 // Initialize Gateway Manager
                 _gatewayManager = new DiscordGatewayManager();
-                var gatewayConnected = await _gatewayManager.ConnectAsync(_accessToken, Discord.TokenType.Bearer);
+                var gatewayConnected = await _gatewayManager.ConnectAsync(accessToken, Discord.TokenType.Bearer);
 
                 if (!gatewayConnected)
                 {
                     Log("Failed to connect to Discord Gateway", LogLevel.ERROR);
                 }
 
-                // Initialize RPC Manager
-                _rpcManager = new DiscordRPCManager();
-                var rpcConnected = await _rpcManager.ConnectAsync(DiscordConfig.CLIENT_ID);
+                // Initialize Global RPC Manager (singleton shared across all widgets)
+                Log("Attempting to connect to Discord RPC (global singleton)...", LogLevel.INFO);
+                var rpcInitialized = await GlobalRPCManager.InitializeAsync();
 
-                if (rpcConnected)
+                if (rpcInitialized)
                 {
-                    await _rpcManager.AuthorizeAsync(_accessToken);
+                    Log("RPC authenticated successfully!", LogLevel.INFO);
+
+                    // Subscribe to RPC events for this widget instance
+                    var rpcInstance = GlobalRPCManager.Instance;
+                    rpcInstance.VoiceChannelSelected += async (data) =>
+                    {
+                        if (!_isDisposed)
+                        {
+                            Log($"Voice channel changed: {data.ChannelId}", LogLevel.INFO);
+                            RequestUpdate();
+                        }
+                        await Task.CompletedTask;
+                    };
+
+                    rpcInstance.SpeakingStarted += async (data) =>
+                    {
+                        if (!_isDisposed)
+                        {
+                            RequestUpdate();
+                        }
+                        await Task.CompletedTask;
+                    };
+
+                    rpcInstance.SpeakingStopped += async (data) =>
+                    {
+                        if (!_isDisposed)
+                        {
+                            RequestUpdate();
+                        }
+                        await Task.CompletedTask;
+                    };
+
+                    Log("RPC events subscribed for this widget instance", LogLevel.INFO);
                 }
                 else
                 {
-                    Log("Failed to connect to Discord RPC (client may not be running)", LogLevel.WARN);
+                    Log("Failed to initialize global RPC (Discord client may not be running)", LogLevel.WARN);
                 }
 
                 // Initialize REST Client
-                _restClient = new DiscordRESTClient(_accessToken);
+                _restClient = new DiscordRESTClient(accessToken);
 
                 _isInitialized = true;
+
+                // Initialize current action with new context
+                if (!string.IsNullOrEmpty(_currentActionType))
+                {
+                    LoadActionHandler(_currentActionType);
+                }
 
                 Log("Discord managers initialized", LogLevel.INFO);
             }
@@ -468,8 +648,8 @@ namespace WigiDash.DiscordWidget
                 _currentAction?.Dispose();
 
                 // Dispose Discord managers
+                // Note: RPC is global singleton, so we don't dispose it here
                 _gatewayManager?.Dispose();
-                _rpcManager?.Dispose();
                 _restClient?.Dispose();
 
                 // Dispose rendering components
