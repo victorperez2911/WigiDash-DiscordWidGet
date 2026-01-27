@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dir:*)",
+      "Bash(dotnet build:*)",
+      "Bash(Select-String -Pattern \"error|warning\" -Context 0,1)",
+      "Bash(powershell:*)"
+    ]
+  }
+}

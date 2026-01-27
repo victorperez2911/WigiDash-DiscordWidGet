@@ -1,0 +1,22 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Build Widget",
+            "type": "coreclr",
+            "request": "launch",
+            "preLaunchTask": "build",
+            "program": "${workspaceFolder}/bin/Debug/net472/3035795C-15EC-4B09-859D-27D1178C949C.dll",
+            "args": [],
+            "cwd": "${workspaceFolder}",
+            "console": "internalConsole",
+            "stopAtEntry": false
+        },
+        {
+            "name": "Attach to WigiDash",
+            "type": "coreclr",
+            "request": "attach",
+            "processName": "WigiDashManager.exe"
+        }
+    ]
+}

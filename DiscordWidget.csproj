@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net472</TargetFramework>
+    <OutputType>Library</OutputType>
+    <RootNamespace>WigiDash.DiscordWidget</RootNamespace>
+    <AssemblyName>3035795C-15EC-4B09-859D-27D1178C949C</AssemblyName>
+    <LangVersion>latest</LangVersion>
+    <UseWPF>true</UseWPF>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- WigiDash Framework -->
+    <PackageReference Include="victorperez2911.WigiDashWidgetFramework" Version="1.1.0" />
+
+    <!-- Discord.Net - Version 2.4.0 for .NET Framework -->
+    <PackageReference Include="Discord.Net" Version="2.4.0" />
+
+    <!-- WebSocket Client (for RPC local) -->
+    <PackageReference Include="System.Net.WebSockets.Client" Version="4.3.2" />
+
+    <!-- JSON -->
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Resource Include="icon.png" />
+    <Resource Include="Resources\Icons\*.png" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="System.Drawing" />
+    <Reference Include="System.Windows.Forms" />
+    <Reference Include="System.Net.Http" />
+    <Reference Include="System.Security" />
+  </ItemGroup>
+</Project>
