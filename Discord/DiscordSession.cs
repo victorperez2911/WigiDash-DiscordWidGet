@@ -54,6 +54,11 @@ public sealed class DiscordSession
     private const int MaxNotifications = 50;
     private readonly List<DiscordNotification> _notifications = [];
     private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(15) };
+    private static readonly TimeSpan GuildCountsTtl = TimeSpan.FromMinutes(1);
+    private readonly Lock _guildCountsLock = new();
+    private Task<JsonElement>? _guildCounts;
+    private DateTimeOffset _guildCountsValidUntil;
+    private TimeSpan _guildCountsRetry = TimeSpan.FromSeconds(10);
 
     private readonly string _pipePrefix;
 
@@ -287,18 +292,58 @@ public sealed class DiscordSession
     /// <summary>
     /// Membros e online de um servidor, pela API REST com o token do usuário
     /// (<c>users/@me/guilds?with_counts=true</c>, scope guilds). <c>null</c> se você não está nele.
+    /// A lista vale para todos os servidores e é lida no máximo uma vez por minuto: a rota tem limite de
+    /// taxa baixo (o Discord devolveu 429 em 3 leituras seguidas no teste de 30/10).
     /// </summary>
     public async Task<GuildCounts?> GetGuildCountsAsync(string guildId, CancellationToken cancellationToken = default)
+    {
+        Task<JsonElement> fetch;
+        lock (_guildCountsLock)
+        {
+            if (_guildCounts is null || _time.GetUtcNow() >= _guildCountsValidUntil)
+            {
+                _guildCounts = FetchGuildCountsAsync();
+                _guildCountsValidUntil = _time.GetUtcNow() + GuildCountsTtl;
+            }
+            fetch = _guildCounts;
+        }
+
+        JsonElement list;
+        try
+        {
+            list = await fetch.WaitAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception) when (!cancellationToken.IsCancellationRequested)
+        {
+            lock (_guildCountsLock)
+            {
+                // Falhou: tenta de novo daqui a pouco (ou no retry_after do 429).
+                if (_guildCounts == fetch)
+                    _guildCountsValidUntil = _time.GetUtcNow() + _guildCountsRetry;
+            }
+            throw;
+        }
+        return GuildCounts.Find(list, guildId);
+    }
+
+    private async Task<JsonElement> FetchGuildCountsAsync()
     {
         if (State != DiscordState.Ready || _store.LoadToken() is not { } token)
             throw new InvalidOperationException("Discord não está conectado.");
         using var request = new HttpRequestMessage(HttpMethod.Get, $"{ApiBase}/users/@me/guilds?with_counts=true");
         request.Headers.Authorization = new("Bearer", token.AccessToken);
-        using var response = await Http.SendAsync(request, cancellationToken).ConfigureAwait(false);
+        using var response = await Http.SendAsync(request).ConfigureAwait(false);
+        if ((int)response.StatusCode == 429)
+        {
+            var wait = response.Headers.RetryAfter?.Delta ?? TimeSpan.FromSeconds(10);
+            _guildCountsRetry = wait < TimeSpan.FromSeconds(1) ? TimeSpan.FromSeconds(1) : wait;
+            throw new HttpRequestException($"Limite de taxa do Discord; tentando de novo em {_guildCountsRetry.TotalSeconds:0} s.");
+        }
+        _guildCountsRetry = TimeSpan.FromSeconds(10);
         response.EnsureSuccessStatusCode();
-        using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
-        using var json = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken).ConfigureAwait(false);
-        return GuildCounts.Find(json.RootElement, guildId);
+        using var stream = await response.Content.ReadAsStreamAsync().ConfigureAwait(false);
+        using var json = await JsonDocument.ParseAsync(stream).ConfigureAwait(false);
+        return json.RootElement.Clone();
     }
 
     /// <summary>Base da API REST; os testes apontam para um servidor local.</summary>

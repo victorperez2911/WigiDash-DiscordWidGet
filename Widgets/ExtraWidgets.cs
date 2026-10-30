@@ -40,6 +40,9 @@ public sealed class SoundboardInstance(IWidgetContext context) : DiscordOptionsI
     protected override string Glyph => Glyphs.Music;
     protected override string Label => "Soundboard";
 
+    private static readonly TimeSpan ErrorTime = TimeSpan.FromSeconds(3);
+    private string? _error;
+
     public override Type? OptionsComponent => typeof(SoundboardOptionsPanel);
 
     protected override ButtonVisual GetVisual()
@@ -47,6 +50,8 @@ public sealed class SoundboardInstance(IWidgetContext context) : DiscordOptionsI
         if (Options.SoundId is null)
             return new ButtonVisual(Glyph, Label) { Detail = "Escolha o som", Dimmed = true };
         var name = string.IsNullOrEmpty(Options.Emoji) ? Options.SoundName : $"{Options.Emoji} {Options.SoundName}";
+        if (_error is not null)
+            return new ButtonVisual(Glyph, name ?? Label) { Accent = ButtonRenderer.Danger, Detail = _error };
         return Session.VoiceChannel is null
             ? new ButtonVisual(Glyph, name ?? Label) { Detail = "Entre numa call", Dimmed = true }
             : new ButtonVisual(Glyph, name ?? Label);
@@ -56,8 +61,26 @@ public sealed class SoundboardInstance(IWidgetContext context) : DiscordOptionsI
     {
         if (touch.Kind != TouchKind.Tap || Options.SoundId is not { } id || Session.VoiceChannel is null)
             return;
-        await Session.PlaySoundboardSoundAsync(new SoundboardSound(id, Options.SoundName ?? id, Options.GuildId, Options.Emoji),
-            cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await Session.PlaySoundboardSoundAsync(new SoundboardSound(id, Options.SoundName ?? id, Options.GuildId, Options.Emoji),
+                cancellationToken).ConfigureAwait(false);
+        }
+        catch (DiscordRpcException ex)
+        {
+            // Ex.: "Invalid Sound" para som de outro servidor sem Nitro (visto no teste de 30/10).
+            Context.Logger.LogInformation("Discord: soundboard recusou {Sound}: {Message}", Options.SoundName, ex.Message);
+            _error = SoundboardSound.IsDefaultGuild(Options.GuildId) ? "Não tocou" : "Som de outro servidor";
+            Refresh();
+            _ = ClearErrorAsync();
+        }
+    }
+
+    private async Task ClearErrorAsync()
+    {
+        await Task.Delay(ErrorTime, Context.Host.Time).ConfigureAwait(false);
+        _error = null;
+        Refresh();
     }
 }
 

@@ -24,9 +24,16 @@ public sealed record DiscordNotification(string? ChannelId, string Title, string
             : null;
 }
 
-/// <summary>Som do soundboard (GET_SOUNDBOARD_SOUNDS). <see cref="GuildId"/> nulo = som padrão do Discord.</summary>
+/// <summary>
+/// Som do soundboard (GET_SOUNDBOARD_SOUNDS). Os sons padrão do Discord vêm com <c>guild_id</c> "0" e tocam em
+/// qualquer call; som de servidor só toca em call de outro servidor com Nitro (o Discord responde "Invalid Sound").
+/// </summary>
 public sealed record SoundboardSound(string Id, string Name, string? GuildId, string? Emoji)
 {
+    public bool IsDefault => IsDefaultGuild(GuildId);
+
+    public static bool IsDefaultGuild(string? guildId) => guildId is null or "0";
+
     public static IReadOnlyList<SoundboardSound> ParseList(JsonElement data)
     {
         var list = data.ValueKind == JsonValueKind.Array ? data
