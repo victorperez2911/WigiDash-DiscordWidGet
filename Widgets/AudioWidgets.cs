@@ -32,8 +32,8 @@ public enum VolumeAction
 internal static class VolumeTouch
 {
     /// <summary>
-    /// Quanto o toque soma ao volume. Tap usa o passo como está; no widget largo, metade esquerda abaixa e
-    /// metade direita aumenta; swipe para cima/baixo aumenta/abaixa.
+    /// Quanto o toque soma ao volume. No 1x1, metade de cima aumenta e a de baixo abaixa; no largo, metade
+    /// esquerda abaixa e a direita aumenta; swipe para cima/baixo também. O tile desenha o "+" e o "−".
     /// </summary>
     public static int? Delta(TouchEvent touch, WidgetSize size, int step)
     {
@@ -43,10 +43,13 @@ internal static class VolumeTouch
             TouchKind.SwipeUp => magnitude,
             TouchKind.SwipeDown => -magnitude,
             TouchKind.Tap when size.Columns > 1 => touch.X < size.PixelSize.Width / 2 ? -magnitude : magnitude,
-            TouchKind.Tap => step,
+            TouchKind.Tap => touch.Y < size.PixelSize.Height / 2 ? magnitude : -magnitude,
             _ => null,
         };
     }
+
+    /// <summary>Onde ficam o "−" e o "+" no tile, conforme o tamanho.</summary>
+    public static AdjustHints Hints(WidgetSize size) => size.Columns > 1 ? AdjustHints.Horizontal : AdjustHints.Vertical;
 }
 
 public sealed record AudioDeviceOptions
@@ -122,6 +125,9 @@ public sealed record VolumeOptions
     public VolumeAction Action { get; init; } = VolumeAction.Adjust;
     public int Step { get; init; } = 10;
     public int Value { get; init; } = 100;
+
+    /// <summary>Deixa a saída passar de 100% (o Discord vai até 200%). Desligado, para em 100%.</summary>
+    public bool AllowBoost { get; init; }
 }
 
 /// <summary>Volume de entrada ou saída do Discord (SET_VOICE_SETTINGS volume).</summary>
@@ -140,7 +146,7 @@ public sealed class VolumeControlWidget : DiscordWidgetBase
 public sealed class VolumeControlInstance(IWidgetContext context) : DiscordOptionsInstance<VolumeOptions>(context)
 {
     private bool IsInput => Options.Side == AudioSide.Input;
-    private int Max => IsInput ? 100 : 200;
+    private int Max => IsInput || !Options.AllowBoost ? 100 : 200;
 
     protected override string Glyph => IsInput ? Glyphs.Microphone : Glyphs.Volume;
     protected override string Label => IsInput ? "Volume do microfone" : "Volume de saída";
@@ -154,6 +160,7 @@ public sealed class VolumeControlInstance(IWidgetContext context) : DiscordOptio
         {
             Detail = Options.Action == VolumeAction.Set ? $"{Label}: {Options.Value}%" : Label,
             Level = volume / Max,
+            Hints = Options.Action == VolumeAction.Set ? AdjustHints.None : VolumeTouch.Hints(Context.Size),
         };
     }
 
@@ -170,7 +177,8 @@ public sealed class VolumeControlInstance(IWidgetContext context) : DiscordOptio
         else
             return;
 
-        target = Math.Clamp(target, 0, Max);
+        // Acima do limite (ex.: estava em 150% antes de desligar o "até 200%"), só deixa abaixar.
+        target = Math.Clamp(target, 0, Math.Max(Max, Math.Min(current, target)));
         var key = IsInput ? "input" : "output";
         await Session.SetVoiceSettingsAsync(new JsonObject { [key] = new JsonObject { ["volume"] = target } }, cancellationToken)
             .ConfigureAwait(false);
@@ -220,6 +228,7 @@ public sealed class UserVolumeInstance(IWidgetContext context) : DiscordOptionsI
         {
             Detail = $"{Math.Round(user.Volume)}%",
             Level = user.Volume / 200,
+            Hints = Options.Action == VolumeAction.Adjust ? VolumeTouch.Hints(Context.Size) : AdjustHints.None,
             Faces = [new AvatarFace(user.AvatarUrl, user.Name, Session.IsSpeaking(user.Id))],
         };
     }

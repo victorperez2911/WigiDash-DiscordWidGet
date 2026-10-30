@@ -31,8 +31,21 @@ public sealed record ButtonVisual(string Glyph, string Label)
     /// <summary>Contador no canto superior direito (ex.: pessoas no canal).</summary>
     public int? Badge { get; init; }
 
+    /// <summary>"−" e "+" nas bordas, mostrando onde tocar para abaixar e aumentar.</summary>
+    public AdjustHints Hints { get; init; }
+
     /// <summary>Imagem no lugar do ícone (ex.: emoji do som), baixada pelo <see cref="AvatarCache"/>.</summary>
     public string? ImageUrl { get; init; }
+}
+
+/// <summary>Onde o tile desenha o "−" e o "+" de ajuste (volume).</summary>
+public enum AdjustHints
+{
+    None,
+    /// <summary>"−" à esquerda, "+" à direita (2x1).</summary>
+    Horizontal,
+    /// <summary>"+" em cima, "−" embaixo (1x1).</summary>
+    Vertical,
 }
 
 /// <summary>Um avatar: imagem do CDN (ou a inicial do nome enquanto não chega) e o anel de quem está falando.</summary>
@@ -101,6 +114,9 @@ public static class ButtonRenderer
                 using var brush = new SolidBrush(foreground);
                 g.DrawString(visual.Glyph, iconFont, brush, iconArea, Centered);
             }
+
+            if (visual.Hints != AdjustHints.None)
+                DrawHints(g, size, visual.Hints, foreground);
 
             if (visual.Badge is { } badge)
                 DrawBadge(g, size, theme, badge, background, foreground);
@@ -200,6 +216,24 @@ public static class ButtonRenderer
         using var font = new Font("Segoe UI Semibold", rect.Height * 0.45f, GraphicsUnit.Pixel);
         var initial = face.Name.Length > 0 ? char.ToUpperInvariant(face.Name[0]).ToString() : "?";
         g.DrawString(initial, font, Brushes.White, rect, Centered);
+    }
+
+    private static void DrawHints(Graphics g, PixelSize size, AdjustHints hints, Color foreground)
+    {
+        var box = Math.Max(22f, size.Height / 5f);
+        using var font = new Font("Segoe UI Semibold", box * 0.8f, GraphicsUnit.Pixel);
+        using var brush = new SolidBrush(Color.FromArgb(200, foreground));
+        if (hints == AdjustHints.Horizontal)
+        {
+            var y = (size.Height - box) / 2 - box / 3;
+            g.DrawString("−", font, brush, new RectangleF(6, y, box, box), Centered);
+            g.DrawString("+", font, brush, new RectangleF(size.Width - box - 6, y, box, box), Centered);
+        }
+        else
+        {
+            g.DrawString("+", font, brush, new RectangleF(size.Width - box - 4, 4, box, box), Centered);
+            g.DrawString("−", font, brush, new RectangleF(size.Width - box - 4, size.Height / 2f, box, box), Centered);
+        }
     }
 
     /// <summary>Pílula com o contador no canto superior direito, como o "2" de pessoas da Elgato.</summary>

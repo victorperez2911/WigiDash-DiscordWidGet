@@ -225,17 +225,38 @@ public sealed class ChannelAudioWidgetTests : IAsyncLifetime
         await Tap(widget, x: 10);
         Assert.Equal(90, _outputVolume);
 
+        // Sem "até 200%", a saída para em 100%.
         await Tap(widget, x: WidgetSize.Wide.PixelSize.Width - 10);
+        await Tap(widget, x: WidgetSize.Wide.PixelSize.Width - 10);
+        Assert.Equal(100, _outputVolume);
+
+        await widget.SaveOptionsAsync(widget.Options with { AllowBoost = true });
         await Tap(widget, x: WidgetSize.Wide.PixelSize.Width - 10);
         Assert.Equal(110, _outputVolume);
         Assert.Equal("110%", widget.CurrentVisual().Label);
+        Assert.Equal(AdjustHints.Horizontal, widget.CurrentVisual().Hints);
+    }
+
+    [Fact]
+    public async Task Volume_no_1x1_metade_de_cima_aumenta_e_de_baixo_abaixa()
+    {
+        _outputVolume = 50;
+        await using var widget = await CreateAsync<VolumeControlInstance>(new VolumeControlWidget());
+        await widget.SaveOptionsAsync(new VolumeOptions { Side = AudioSide.Output, Step = 10 });
+
+        await widget.OnTouchAsync(new TouchEvent(TouchKind.Tap, 50, 10, TimeSpan.Zero), CancellationToken.None);
+        Assert.Equal(60, _outputVolume);
+
+        await widget.OnTouchAsync(new TouchEvent(TouchKind.Tap, 50, WidgetSize.Small.PixelSize.Height - 10, TimeSpan.Zero), CancellationToken.None);
+        Assert.Equal(50, _outputVolume);
+        Assert.Equal(AdjustHints.Vertical, widget.CurrentVisual().Hints);
     }
 
     [Fact]
     public async Task Volume_definir_usa_o_valor_e_respeita_o_limite()
     {
         await using var widget = await CreateAsync<VolumeControlInstance>(new VolumeControlWidget());
-        await widget.SaveOptionsAsync(new VolumeOptions { Side = AudioSide.Output, Action = VolumeAction.Set, Value = 250 });
+        await widget.SaveOptionsAsync(new VolumeOptions { Side = AudioSide.Output, Action = VolumeAction.Set, Value = 250, AllowBoost = true });
 
         await Tap(widget);
 
@@ -248,10 +269,11 @@ public sealed class ChannelAudioWidgetTests : IAsyncLifetime
         _channelId = "c1";
         await using var widget = await CreateAsync<UserVolumeInstance>(new UserVolumeWidget());
         await FakeDiscord.WaitUntilAsync(() => _session.VoiceChannel is not null);
-        await widget.SaveOptionsAsync(new UserVolumeOptions { UserId = "u2", UserName = "Amigo", Step = -20 });
+        await widget.SaveOptionsAsync(new UserVolumeOptions { UserId = "u2", UserName = "Amigo", Step = 20 });
         Assert.Equal("Amigo", widget.CurrentVisual().Label);
 
-        await Tap(widget);
+        // Metade de baixo do 1x1 abaixa.
+        await widget.OnTouchAsync(new TouchEvent(TouchKind.Tap, 50, WidgetSize.Small.PixelSize.Height - 10, TimeSpan.Zero), CancellationToken.None);
         Assert.Equal(80, _friendVolume);
         await FakeDiscord.WaitUntilAsync(() => widget.CurrentVisual().Detail == "80%");
 
