@@ -117,6 +117,34 @@ public sealed class VoiceWidgetTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Mute_inteligente_toque_alterna_e_segurar_inverte_ate_soltar()
+    {
+        await using var smart = await CreateAsync<SmartMuteInstance>(new SmartMuteWidget());
+
+        // Toque rápido: alterna e fica.
+        await Touch(smart, TouchKind.PressStarted);
+        await Touch(smart, TouchKind.PressEnded);
+        await Touch(smart, TouchKind.Tap);
+        Assert.True(_voice.Mute);
+
+        // Mutado, segurar abre o microfone e soltar volta a mutar.
+        await Touch(smart, TouchKind.PressStarted);
+        await Touch(smart, TouchKind.LongPress);
+        Assert.False(_voice.Mute);
+        Assert.Equal("Falando", smart.CurrentVisual().Label);
+        await Touch(smart, TouchKind.PressEnded);
+        Assert.True(_voice.Mute);
+
+        // Falando, segurar muta e soltar volta a falar.
+        await Touch(smart, TouchKind.Tap);
+        Assert.False(_voice.Mute);
+        await Touch(smart, TouchKind.LongPress);
+        Assert.True(_voice.Mute);
+        await Touch(smart, TouchKind.PressEnded);
+        Assert.False(_voice.Mute);
+    }
+
+    [Fact]
     public async Task Voice_input_mode_alterna_entre_deteccao_e_PTT()
     {
         await using var mode = await CreateAsync<VoiceInputModeInstance>(new VoiceInputModeWidget());
