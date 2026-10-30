@@ -1,169 +1,75 @@
-# WigiDash Discord Widget - Deploy Script
-# Automatiza build e deploy do Discord widget para o WigiDash
+# OpenWigiDash Widget Development - Deploy Script (branch net10)
+# Build e deploy do widget Discord para o OpenWigiDashManager.
+# A main guarda a tentativa net472 (parada no erro 4001 do WebSocket).
 
 param(
-    [string]$Configuration = "Release",
-    [switch]$RestartWigiDash = $false
+    [string]$Configuration = "Debug",
+    [switch]$RestartManager = $false,
+    [switch]$SkipBuild = $false
 )
 
-# Paths
-$projectPath = "$PSScriptRoot"
-$widgetGuid = "3035795C-15EC-4B09-859D-27D1178C949C"
-$widgetDllName = "$widgetGuid.dll"
-$wigiDashWidgetsPath = "$env:APPDATA\G.SKILL\WigiDashManager\Widgets"
+$ErrorActionPreference = 'Stop'
 
-Write-Host "=== WigiDash Discord Widget Deploy ===" -ForegroundColor Cyan
+$projectPath = "$PSScriptRoot"
+$name = "DiscordWidget"
+$widgetsPath = Join-Path $env:LOCALAPPDATA 'OpenWigiDash\Widgets'
+$targetFolder = Join-Path $widgetsPath $name
+$staging = Join-Path $projectPath "bin\publish\$Configuration"
+
+Write-Host "=== Discord (OpenWigiDash) Deploy ===" -ForegroundColor Cyan
 Write-Host "Configuration: $Configuration" -ForegroundColor Yellow
 Write-Host ""
 
-# Step 1: Build
-Write-Host "[1/4] Building project..." -ForegroundColor Green
-dotnet build "$projectPath\DiscordWidget.csproj" -c $Configuration --source https://api.nuget.org/v3/index.json
-
-if ($LASTEXITCODE -ne 0) {
-    Write-Host "Build failed!" -ForegroundColor Red
-    exit 1
-}
-
-# Step 1.5: Stop WigiDash (Critical for file access)
-Write-Host "[1.5/4] Checking for running WigiDash..." -ForegroundColor Green
-$wigiDashProcess = Get-Process -Name "WigiDashManager" -ErrorAction SilentlyContinue
-
-if ($wigiDashProcess) {
-    if ($RestartWigiDash) {
-        Write-Host "Stopping WigiDash to release file locks..." -ForegroundColor Yellow
-        Stop-Process -Name "WigiDashManager" -Force
-        Start-Sleep -Seconds 2
-    }
-    else {
-        Write-Host "WARNING: WigiDash is running. File copy might fail." -ForegroundColor Red
-        Write-Host "Use -RestartWigiDash to auto-close it, or close manually." -ForegroundColor Yellow
-    }
-}
-
-# Step 2: Prepare widget folder
-$targetFolder = Join-Path $wigiDashWidgetsPath $widgetGuid
-
-if (-not (Test-Path $wigiDashWidgetsPath)) {
-    Write-Host "WigiDash Widgets folder not found: $wigiDashWidgetsPath" -ForegroundColor Red
-    Write-Host "Make sure WigiDash is installed." -ForegroundColor Yellow
-    exit 1
-}
-
-Write-Host "[2/4] Preparing widget folder..." -ForegroundColor Green
-if (Test-Path $targetFolder) {
-    try {
-        Remove-Item $targetFolder -Recurse -Force -ErrorAction Stop
-    }
-    catch {
-        Write-Host "Failed to clean folder. WigiDash might still be locking files." -ForegroundColor Red
-        if (-not $RestartWigiDash) {
-            Write-Host "Try running with -RestartWigiDash" -ForegroundColor Cyan
-        }
+# Passo 1: build (publish leva as dependências do plugin; SDK e MudBlazor ficam com o host)
+Write-Host "[1/4] Building..." -ForegroundColor Green
+if (-not $SkipBuild) {
+    dotnet publish "$projectPath\DiscordWidget.csproj" -c $Configuration -o $staging
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "Build failed!" -ForegroundColor Red
         exit 1
     }
 }
-New-Item -ItemType Directory -Path $targetFolder -Force | Out-Null
-
-# Create Resources/Icons folder
-$resourcesFolder = Join-Path $targetFolder "Resources\Icons"
-New-Item -ItemType Directory -Path $resourcesFolder -Force | Out-Null
-
-# Step 3: Copy files
-Write-Host "[3/4] Copying widget files..." -ForegroundColor Green
-$sourcePath = "$projectPath\bin\$Configuration\net472"
-
-if (-not (Test-Path $sourcePath)) {
-    Write-Host "Build output not found: $sourcePath" -ForegroundColor Red
-    exit 1
+if (-not (Test-Path -LiteralPath (Join-Path $staging "$name.dll"))) {
+    throw "Build output not found: $staging"
 }
 
-# Copy main DLL
-Copy-Item "$sourcePath\$widgetDllName" $targetFolder -Force
-Write-Host "  [OK] $widgetDllName" -ForegroundColor Gray
-
-# Copy dependencies (excluding main DLL)
-$dependencies = @(
-    "Discord.Net.Core.dll",
-    "Discord.Net.Rest.dll",
-    "Discord.Net.WebSocket.dll",
-    "Discord.Net.Commands.dll",
-    "Discord.Net.Webhook.dll",
-    "Newtonsoft.Json.dll",
-    "System.Interactive.Async.dll",
-    "websocket-sharp.dll",  # WebSocket library for RPC (fixes Origin header issue)
-    "Microsoft.Bcl.AsyncInterfaces.dll",
-    "System.Collections.Immutable.dll",
-    "WigiDashWidgetFramework.dll"
-)
-
-foreach ($dep in $dependencies) {
-    $depPath = Join-Path $sourcePath $dep
-    if (Test-Path $depPath) {
-        Copy-Item $depPath $targetFolder -Force
-        Write-Host "  [OK] $dep" -ForegroundColor Gray
+# Passo 2: o manager segura a DLL carregada; precisa estar fechado para trocar
+Write-Host "[2/4] Checking for running OpenWigiDash Manager..." -ForegroundColor Green
+$manager = Get-Process -Name 'OpenWigiDashManager' -ErrorAction SilentlyContinue
+if ($manager) {
+    if ($RestartManager) {
+        $managerPath = $manager[0].Path
+        Write-Host "Stopping OpenWigiDash Manager to release file locks..." -ForegroundColor Yellow
+        $manager | Stop-Process -Force
+        Start-Sleep -Seconds 3
     }
     else {
-        Write-Host "  [WARN] $dep (not found)" -ForegroundColor Yellow
+        Write-Host "OpenWigiDash Manager is running. Use -RestartManager to close it automatically." -ForegroundColor Red
+        exit 1
     }
 }
 
-# Copy icon
-if (Test-Path "$sourcePath\icon.png") {
-    Copy-Item "$sourcePath\icon.png" $targetFolder -Force
-    Write-Host "  [OK] icon.png" -ForegroundColor Gray
+# Passo 3: backup e cópia
+Write-Host "[3/4] Copying widget files..." -ForegroundColor Green
+if (Test-Path $targetFolder) {
+    $backupFolder = Join-Path $env:LOCALAPPDATA ("OpenWigiDash\Backups\$name\" + (Get-Date -Format 'yyyyMMdd-HHmmss-fff'))
+    New-Item -ItemType Directory -Path $backupFolder -Force | Out-Null
+    Copy-Item -Path (Join-Path $targetFolder '*') -Destination $backupFolder -Recurse -Force
+    Write-Host "Previous widget backed up to: $backupFolder" -ForegroundColor Cyan
+    Remove-Item $targetFolder -Recurse -Force
 }
-elseif (Test-Path "$projectPath\icon.png") {
-    Copy-Item "$projectPath\icon.png" $targetFolder -Force
-    Write-Host "  [OK] icon.png (from source)" -ForegroundColor Gray
-}
-else {
-    Write-Host "  [WARN] icon.png not found" -ForegroundColor Yellow
-}
-
-# Copy Resources/Icons if they exist
-if (Test-Path "$projectPath\Resources\Icons") {
-    $iconFiles = Get-ChildItem "$projectPath\Resources\Icons\*.png" -ErrorAction SilentlyContinue
-    foreach ($icon in $iconFiles) {
-        Copy-Item $icon.FullName $resourcesFolder -Force
-        Write-Host "  [OK] Resources/Icons/$($icon.Name)" -ForegroundColor Gray
-    }
-}
-
-Write-Host ""
+New-Item -ItemType Directory -Path $targetFolder -Force | Out-Null
+Copy-Item -Path (Join-Path $staging '*') -Destination $targetFolder -Recurse -Force
 Write-Host "Widget deployed to: $targetFolder" -ForegroundColor Cyan
 
-# Step 4: Restart WigiDash (optional)
-if ($RestartWigiDash) {
-    Write-Host "[4/4] Restarting WigiDash..." -ForegroundColor Green
-
-    # Try to start WigiDash
-    $wigiDashExe = "C:\Program Files (x86)\G.SKILL\WigiDash Manager\WigiDashManager.exe"
-    if (Test-Path $wigiDashExe) {
-        Write-Host "Starting WigiDash..." -ForegroundColor Yellow
-        Start-Process $wigiDashExe
-        Start-Sleep -Seconds 2
-    }
-    else {
-        Write-Host "WigiDashManager.exe not found at: $wigiDashExe" -ForegroundColor Yellow
-        Write-Host "Please restart WigiDash manually." -ForegroundColor Yellow
-    }
+# Passo 4: reabrir o manager
+if ($RestartManager -and $managerPath) {
+    Write-Host "[4/4] Restarting OpenWigiDash Manager..." -ForegroundColor Green
+    Start-Process $managerPath -ArgumentList '--tray'
 }
 else {
-    Write-Host "[4/4] Skipped WigiDash restart" -ForegroundColor Yellow
-    Write-Host ""
-    Write-Host "To load the widget, restart WigiDash manually or run:" -ForegroundColor Cyan
-    Write-Host "  .\deploy.ps1 -RestartWigiDash" -ForegroundColor White
+    Write-Host "[4/4] Open the OpenWigiDash Manager to load the widget." -ForegroundColor Yellow
 }
 
 Write-Host ""
 Write-Host "=== Deploy Complete! ===" -ForegroundColor Green
-Write-Host ""
-Write-Host "Widget Path: $targetFolder" -ForegroundColor Cyan
-Write-Host "Widget GUID: $widgetGuid" -ForegroundColor Cyan
-Write-Host ""
-Write-Host "Next steps:" -ForegroundColor Yellow
-Write-Host "  1. Open WigiDash Manager" -ForegroundColor White
-Write-Host "  2. Discord Widget should appear in the widget list" -ForegroundColor White
-Write-Host "  3. Configure Discord Client ID in DiscordConfig.cs before using" -ForegroundColor White
-Write-Host ""

@@ -1,0 +1,24 @@
+@inherits WidgetSettingsComponent<DiscordButtonInstance>
+@implements IDisposable
+
+@* Tela de configurações de todos os widgets do Discord: conta (comum a todos) e, se o widget tiver,
+   as opções dele. *@
+<MudStack Spacing="4">
+    <AccountPanel Session="Instance.Session" />
+
+    @if (Instance.OptionsComponent is { } options)
+    {
+        <div>
+            <MudText Typo="Typo.overline" Color="Color.Secondary">Opções do widget</MudText>
+            <DynamicComponent Type="options" Parameters="@(new Dictionary<string, object?> { ["Instance"] = Instance })" />
+        </div>
+    }
+</MudStack>
+
+@code {
+    protected override void OnInitialized() => Instance.Changed += OnChanged;
+
+    private void OnChanged() => InvokeAsync(StateHasChanged);
+
+    public void Dispose() => Instance.Changed -= OnChanged;
+}

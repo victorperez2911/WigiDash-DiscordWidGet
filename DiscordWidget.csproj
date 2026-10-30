@@ -1,37 +1,52 @@
-<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk.Razor">
+
+  <!-- Versão .NET 10 para o OpenWigiDashManager (branch net10). A main guarda a tentativa net472, que
+       parou no erro 4001 do WebSocket; esta fala com o Discord pelo named pipe discord-ipc-N. -->
   <PropertyGroup>
-    <TargetFramework>net472</TargetFramework>
-    <OutputType>Library</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
     <RootNamespace>WigiDash.DiscordWidget</RootNamespace>
-    <AssemblyName>3035795C-15EC-4B09-859D-27D1178C949C</AssemblyName>
+    <AssemblyName>DiscordWidget</AssemblyName>
     <LangVersion>latest</LangVersion>
-    <UseWPF>true</UseWPF>
-    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <EnableDynamicLoading>true</EnableDynamicLoading>
+    <Version>2.0.0</Version>
+    <Authors>Victor Perez</Authors>
+    <Product>Discord</Product>
+    <Description>Controle do Discord no WigiDash (OpenWigiDashManager): mute, deafen, canais, volume, soundboard.</Description>
   </PropertyGroup>
 
-  <ItemGroup>
-    <!-- WigiDash Framework -->
-    <PackageReference Include="victorperez2911.WigiDashWidgetFramework" Version="1.1.0" />
+  <!-- O SDK vem do nuget.org. Para testar mudanças no SDK antes de publicar, compile com
+       -p:UseLocalOpenWigiSdk=true e o repo OpenWigiDashManager clonado ao lado deste. -->
+  <PropertyGroup>
+    <OpenWigiSdkVersion>2.0.0-preview.1</OpenWigiSdkVersion>
+    <OpenWigiSdkProject Condition="'$(OpenWigiSdkProject)' == ''">$(MSBuildThisFileDirectory)..\OpenWigiDashManager\src\OpenWigi.Sdk\OpenWigi.Sdk.csproj</OpenWigiSdkProject>
+  </PropertyGroup>
 
-    <!-- Discord.Net - Version 2.4.0 for .NET Framework -->
-    <PackageReference Include="Discord.Net" Version="2.4.0" />
-
-    <!-- WebSocket Sharp - Gives control over Origin header -->
-    <PackageReference Include="WebSocketSharp" Version="1.0.3-rc11" />
-
-    <!-- JSON -->
-    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+  <!-- Contrato e UI vêm do host (uma cópia só): o plugin compila contra eles mas não leva junto. -->
+  <ItemGroup Condition="'$(UseLocalOpenWigiSdk)' == 'true'">
+    <ProjectReference Include="$(OpenWigiSdkProject)" Private="false" ExcludeAssets="runtime" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(UseLocalOpenWigiSdk)' != 'true'">
+    <PackageReference Include="victorperez2911.OpenWigi.Sdk" Version="$(OpenWigiSdkVersion)" ExcludeAssets="runtime" />
   </ItemGroup>
 
   <ItemGroup>
-    <Resource Include="icon.png" />
-    <Resource Include="Resources\Icons\*.png" />
+    <PackageReference Include="MudBlazor" Version="9.11.0" ExcludeAssets="runtime" />
+    <PackageReference Include="System.Drawing.Common" Version="10.0.14" />
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="10.0.0" />
   </ItemGroup>
 
   <ItemGroup>
-    <Reference Include="System.Drawing" />
-    <Reference Include="System.Windows.Forms" />
-    <Reference Include="System.Net.Http" />
-    <Reference Include="System.Security" />
+    <None Include="icon.png" CopyToOutputDirectory="PreserveNewest" Condition="Exists('icon.png')" />
+    <None Remove="discord_app_icon.png" />
   </ItemGroup>
+
+  <!-- Os testes têm projeto próprio. -->
+  <ItemGroup>
+    <Compile Remove="tests\**" />
+    <Content Remove="tests\**" />
+    <None Remove="tests\**" />
+  </ItemGroup>
+
 </Project>

@@ -1,0 +1,86 @@
+@implements IDisposable
+
+@* Conta do Discord, a mesma para todos os widgets do plugin. *@
+<div>
+    <MudText Typo="Typo.overline" Color="Color.Secondary">Conta do Discord</MudText>
+
+    <MudStack Row="true" AlignItems="AlignItems.Center">
+        <MudIcon Icon="@Icons.Material.Filled.Circle" Color="@StateColor" Size="Size.Small" />
+        <MudText Typo="Typo.body1">@StateText</MudText>
+    </MudStack>
+    @if (!string.IsNullOrEmpty(Session.Message))
+    {
+        <MudText Typo="Typo.caption" Color="Color.Warning">@Session.Message</MudText>
+    }
+
+    <MudStack Row="true" Spacing="2" Class="mt-2">
+        @if (Session.State is DiscordState.NeedsAuthorization)
+        {
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="Session.RequestAuthorization">
+                Autorizar no Discord
+            </MudButton>
+        }
+        @if (Session.State is DiscordState.Failed or DiscordState.DiscordNotRunning)
+        {
+            <MudButton Variant="Variant.Outlined" OnClick="Session.Reconnect">Tentar de novo</MudButton>
+        }
+        @if (Session.HasSavedToken)
+        {
+            <MudButton Variant="Variant.Text" Color="Color.Secondary" OnClick="Session.SignOut">Desconectar a conta</MudButton>
+        }
+    </MudStack>
+
+    <MudExpansionPanels Class="mt-3" Elevation="0">
+        <MudExpansionPanel Text="App do Developer Portal">
+            <MudStack Spacing="2">
+                <MudText Typo="Typo.body2">
+                    O plugin fala com o Discord aberto no PC, pelo pipe local, usando um app do
+                    <MudLink Href="https://discord.com/developers/applications" Target="_blank">Developer Portal</MudLink>.
+                    O app precisa estar com <b>Public Client</b> ligado (aba OAuth2) e você precisa ser dono do app
+                    ou estar no time dele.
+                </MudText>
+                <MudStack Row="true" AlignItems="AlignItems.Center">
+                    <MudTextField T="string" @bind-Value="_clientId" Label="Client ID" Variant="Variant.Outlined" Style="min-width: 260px" />
+                    <MudButton Variant="Variant.Outlined" Disabled="@(_clientId == Session.ClientId)" OnClick="SaveClientId">Salvar</MudButton>
+                </MudStack>
+            </MudStack>
+        </MudExpansionPanel>
+    </MudExpansionPanels>
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public DiscordSession Session { get; set; } = default!;
+
+    private string _clientId = string.Empty;
+
+    private string StateText => Session.State switch
+    {
+        DiscordState.Ready => $"Conectado como {Session.UserName}",
+        DiscordState.DiscordNotRunning => "O Discord não está aberto neste PC",
+        DiscordState.NeedsAuthorization => $"Discord aberto ({Session.UserName}), falta autorizar",
+        DiscordState.Authorizing => "Clique em Autorizar na janela do Discord",
+        DiscordState.Failed => "Erro na conexão; tentando de novo",
+        DiscordState.Stopped => "Parado",
+        _ => "Conectando...",
+    };
+
+    private Color StateColor => Session.State switch
+    {
+        DiscordState.Ready => Color.Success,
+        DiscordState.Connecting or DiscordState.Authorizing => Color.Info,
+        _ => Color.Warning,
+    };
+
+    protected override void OnInitialized()
+    {
+        _clientId = Session.ClientId;
+        Session.Changed += OnChanged;
+    }
+
+    private void SaveClientId() => Session.SetClientId(_clientId);
+
+    private void OnChanged() => InvokeAsync(StateHasChanged);
+
+    public void Dispose() => Session.Changed -= OnChanged;
+}
