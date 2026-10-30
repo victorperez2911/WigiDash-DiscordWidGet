@@ -1,0 +1,46 @@
+@* Servidor do widget Server Stats. *@
+<MudStack Spacing="2">
+    @if (Instance.Session.State != DiscordState.Ready)
+    {
+        <MudText Typo="Typo.caption" Color="Color.Warning">Conecte o Discord para escolher o servidor.</MudText>
+    }
+    <MudSelect T="string" Value="Instance.Options.GuildId" ValueChanged="Select" Label="Servidor"
+               Variant="Variant.Outlined" Disabled="@(_guilds.Count == 0)" Style="min-width: 320px">
+        @foreach (var guild in _guilds)
+        {
+            <MudSelectItem Value="@guild.Id">@guild.Name</MudSelectItem>
+        }
+    </MudSelect>
+    @if (_error is not null)
+    {
+        <MudText Typo="Typo.caption" Color="Color.Error">@_error</MudText>
+    }
+</MudStack>
+
+@code {
+    [Parameter, EditorRequired]
+    public ServerStatsInstance Instance { get; set; } = default!;
+
+    private IReadOnlyList<Guild> _guilds = [];
+    private string? _error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (Instance.Session.State != DiscordState.Ready)
+            return;
+        try
+        {
+            _guilds = await Instance.Session.GetGuildsAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+    }
+
+    private Task Select(string id) => Instance.SaveOptionsAsync(new ServerStatsOptions
+    {
+        GuildId = id,
+        GuildName = _guilds.FirstOrDefault(g => g.Id == id)?.Name,
+    });
+}

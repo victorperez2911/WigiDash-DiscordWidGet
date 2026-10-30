@@ -48,6 +48,13 @@ public sealed class DiscordSession
 
     private static readonly string[] VoiceStateEvents = ["VOICE_STATE_CREATE", "VOICE_STATE_UPDATE", "VOICE_STATE_DELETE"];
 
+    /// <summary>Eventos de que só alguns widgets precisam; se o Discord recusar um, o resto segue.</summary>
+    private static readonly string[] OptionalEvents = ["NOTIFICATION_CREATE", "VIDEO_STATE_UPDATE", "SCREENSHARE_STATE_UPDATE"];
+
+    private const int MaxNotifications = 50;
+    private readonly List<DiscordNotification> _notifications = [];
+    private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(15) };
+
     private readonly string _pipePrefix;
 
     public DiscordSession(AccountStore store, TimeProvider time, string pipePrefix = IpcConnection.DefaultPipePrefix)
@@ -71,6 +78,22 @@ public sealed class DiscordSession
 
     /// <summary>A call em que você está; <c>null</c> fora de call.</summary>
     public VoiceChannelInfo? VoiceChannel { get; private set; }
+
+    /// <summary>Câmera ligada na call. <c>null</c> até o primeiro VIDEO_STATE_UPDATE.</summary>
+    public bool? VideoActive { get; private set; }
+
+    /// <summary>Transmissão de tela ligada. <c>null</c> até o primeiro SCREENSHARE_STATE_UPDATE.</summary>
+    public bool? ScreenshareActive { get; private set; }
+
+    /// <summary>Notificações recebidas desde a conexão (ou desde <see cref="ClearNotifications"/>), mais antiga primeiro.</summary>
+    public IReadOnlyList<DiscordNotification> Notifications
+    {
+        get
+        {
+            lock (_notifications)
+                return _notifications.ToList();
+        }
+    }
 
     public string ClientId => _store.ClientId;
 
@@ -230,6 +253,80 @@ public sealed class DiscordSession
         }
     }
 
+    public void ClearNotifications()
+    {
+        lock (_notifications)
+            _notifications.Clear();
+        RaiseChanged();
+    }
+
+    /// <summary>Liga ou desliga a câmera na call (TOGGLE_VIDEO).</summary>
+    public async Task ToggleVideoAsync(CancellationToken cancellationToken = default)
+    {
+        await SendAsync("TOGGLE_VIDEO", cancellationToken: cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>Liga ou desliga a transmissão de tela (TOGGLE_SCREENSHARE).</summary>
+    public async Task ToggleScreenshareAsync(CancellationToken cancellationToken = default)
+    {
+        await SendAsync("TOGGLE_SCREENSHARE", cancellationToken: cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>Sons do soundboard que você pode tocar (GET_SOUNDBOARD_SOUNDS).</summary>
+    public async Task<IReadOnlyList<SoundboardSound>> GetSoundboardSoundsAsync(CancellationToken cancellationToken = default) =>
+        SoundboardSound.ParseList(await SendAsync("GET_SOUNDBOARD_SOUNDS", cancellationToken: cancellationToken).ConfigureAwait(false));
+
+    public Task PlaySoundboardSoundAsync(SoundboardSound sound, CancellationToken cancellationToken = default)
+    {
+        var args = new JsonObject { ["sound_id"] = sound.Id };
+        if (sound.GuildId is { } guildId)
+            args["guild_id"] = guildId;
+        return SendAsync("PLAY_SOUNDBOARD_SOUND", args, cancellationToken);
+    }
+
+    /// <summary>
+    /// Membros e online de um servidor, pela API REST com o token do usuário
+    /// (<c>users/@me/guilds?with_counts=true</c>, scope guilds). <c>null</c> se você não está nele.
+    /// </summary>
+    public async Task<GuildCounts?> GetGuildCountsAsync(string guildId, CancellationToken cancellationToken = default)
+    {
+        if (State != DiscordState.Ready || _store.LoadToken() is not { } token)
+            throw new InvalidOperationException("Discord não está conectado.");
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"{ApiBase}/users/@me/guilds?with_counts=true");
+        request.Headers.Authorization = new("Bearer", token.AccessToken);
+        using var response = await Http.SendAsync(request, cancellationToken).ConfigureAwait(false);
+        response.EnsureSuccessStatusCode();
+        using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+        using var json = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken).ConfigureAwait(false);
+        return GuildCounts.Find(json.RootElement, guildId);
+    }
+
+    /// <summary>Base da API REST; os testes apontam para um servidor local.</summary>
+    internal string ApiBase { get; set; } = "https://discord.com/api/v10";
+
+    private async Task TrySubscribeAsync(RpcClient rpc, string evt, CancellationToken ct)
+    {
+        try
+        {
+            await rpc.SubscribeAsync(evt, cancellationToken: ct).ConfigureAwait(false);
+        }
+        catch (DiscordRpcException ex)
+        {
+            _logger.LogInformation("Discord: evento {Event} indisponível ({Message})", evt, ex.Message);
+        }
+    }
+
+    private static bool? ReadActive(JsonElement data)
+    {
+        foreach (var name in new[] { "active", "enabled", "state" })
+        {
+            if (data.ValueKind == JsonValueKind.Object && data.TryGetProperty(name, out var value)
+                && value.ValueKind is JsonValueKind.True or JsonValueKind.False)
+                return value.GetBoolean();
+        }
+        return null;
+    }
+
     private void RefreshVoiceChannelInBackground()
     {
         if (_rpc is not { } rpc)
@@ -279,6 +376,8 @@ public sealed class DiscordSession
                 Voice = VoiceSettings.Parse(await rpc.SendAsync("GET_VOICE_SETTINGS", cancellationToken: ct).ConfigureAwait(false));
                 await rpc.SubscribeAsync("VOICE_SETTINGS_UPDATE", cancellationToken: ct).ConfigureAwait(false);
                 await rpc.SubscribeAsync("VOICE_CHANNEL_SELECT", cancellationToken: ct).ConfigureAwait(false);
+                foreach (var evt in OptionalEvents)
+                    await TrySubscribeAsync(rpc, evt, ct).ConfigureAwait(false);
                 _rpc = rpc;
                 await RefreshVoiceChannelAsync(rpc, ct).ConfigureAwait(false);
                 retry = MinRetry;
@@ -313,6 +412,8 @@ public sealed class DiscordSession
                 _rpc = null;
                 Voice = null;
                 VoiceChannel = null;
+                VideoActive = null;
+                ScreenshareActive = null;
                 _watchedChannelId = null;
                 if (rpc is not null)
                 {
@@ -434,6 +535,26 @@ public sealed class DiscordSession
             UpdateVoice(data);
         else if (evt is "VOICE_CHANNEL_SELECT" or "VOICE_STATE_CREATE" or "VOICE_STATE_UPDATE" or "VOICE_STATE_DELETE")
             RefreshVoiceChannelInBackground();
+        else if (evt == "VIDEO_STATE_UPDATE")
+        {
+            VideoActive = ReadActive(data);
+            RaiseChanged();
+        }
+        else if (evt == "SCREENSHARE_STATE_UPDATE")
+        {
+            ScreenshareActive = ReadActive(data);
+            RaiseChanged();
+        }
+        else if (evt == "NOTIFICATION_CREATE")
+        {
+            lock (_notifications)
+            {
+                _notifications.Add(DiscordNotification.Parse(data, _time.GetUtcNow()));
+                if (_notifications.Count > MaxNotifications)
+                    _notifications.RemoveAt(0);
+            }
+            RaiseChanged();
+        }
         try
         {
             EventReceived?.Invoke(evt, data);

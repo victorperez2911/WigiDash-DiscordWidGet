@@ -1,0 +1,15 @@
+@* Ação do toque no widget Notifications (as mesmas opções da Elgato). *@
+<MudSelect T="NotificationPress" Value="Instance.Options.OnPress"
+           ValueChanged="v => Instance.SaveOptionsAsync(Instance.Options with { OnPress = v })"
+           Label="Ao tocar" Variant="Variant.Outlined" Style="max-width: 360px">
+    <MudSelectItem Value="NotificationPress.Open">Abrir o canal da notificação</MudSelectItem>
+    <MudSelectItem Value="NotificationPress.Clear">Limpar as notificações</MudSelectItem>
+    <MudSelectItem Value="NotificationPress.CycleRecent">Passar da mais nova para a mais antiga</MudSelectItem>
+    <MudSelectItem Value="NotificationPress.CycleOldest">Passar da mais antiga para a mais nova</MudSelectItem>
+    <MudSelectItem Value="NotificationPress.Nothing">Nada</MudSelectItem>
+</MudSelect>
+
+@code {
+    [Parameter, EditorRequired]
+    public NotificationsInstance Instance { get; set; } = default!;
+}

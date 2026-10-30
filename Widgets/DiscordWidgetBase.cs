@@ -149,8 +149,18 @@ public abstract class DiscordButtonInstance : IWidgetInstance
 
     private void OnSessionChanged() => Refresh();
 
+    public virtual ValueTask OnSleepAsync(CancellationToken cancellationToken) => ValueTask.CompletedTask;
+
+    public virtual ValueTask OnWakeAsync(CancellationToken cancellationToken) => ValueTask.CompletedTask;
+
+    /// <summary>Pare timers e tarefas próprias; chamado no <see cref="DisposeAsync"/>.</summary>
+    protected virtual void OnDisposing()
+    {
+    }
+
     public ValueTask DisposeAsync()
     {
+        OnDisposing();
         Session.Changed -= OnSessionChanged;
         _lease.Dispose();
         GC.SuppressFinalize(this);
@@ -173,7 +183,7 @@ public abstract class DiscordOptionsInstance<TOptions>(IWidgetContext context) :
         Options = await Context.Settings.GetJsonAsync(OptionsKey, new TOptions(), cancellationToken: cancellationToken)
             .ConfigureAwait(false);
 
-    public async Task SaveOptionsAsync(TOptions options)
+    public virtual async Task SaveOptionsAsync(TOptions options)
     {
         Options = options;
         await Context.Settings.SetJsonAsync(OptionsKey, options).ConfigureAwait(false);
