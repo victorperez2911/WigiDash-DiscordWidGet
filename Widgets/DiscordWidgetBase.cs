@@ -157,3 +157,26 @@ public abstract class DiscordButtonInstance : IWidgetInstance
         return ValueTask.CompletedTask;
     }
 }
+
+/// <summary>
+/// Botão com opções próprias, guardadas como JSON na chave <c>options</c> das configurações da instância
+/// (vão junto ao duplicar o widget).
+/// </summary>
+public abstract class DiscordOptionsInstance<TOptions>(IWidgetContext context) : DiscordButtonInstance(context)
+    where TOptions : class, new()
+{
+    private const string OptionsKey = "options";
+
+    public TOptions Options { get; private set; } = new();
+
+    protected internal override async ValueTask LoadSettingsAsync(CancellationToken cancellationToken) =>
+        Options = await Context.Settings.GetJsonAsync(OptionsKey, new TOptions(), cancellationToken: cancellationToken)
+            .ConfigureAwait(false);
+
+    public async Task SaveOptionsAsync(TOptions options)
+    {
+        Options = options;
+        await Context.Settings.SetJsonAsync(OptionsKey, options).ConfigureAwait(false);
+        Refresh();
+    }
+}

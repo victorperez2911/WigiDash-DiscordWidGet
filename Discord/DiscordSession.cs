@@ -43,6 +43,10 @@ public sealed class DiscordSession
     private CancellationTokenSource _connectionCts = new();
     private TaskCompletionSource _authorizationRequested = NewSignal();
     private volatile RpcClient? _rpc;
+    private readonly SemaphoreSlim _channelLock = new(1, 1);
+    private string? _watchedChannelId;
+
+    private static readonly string[] VoiceStateEvents = ["VOICE_STATE_CREATE", "VOICE_STATE_UPDATE", "VOICE_STATE_DELETE"];
 
     private readonly string _pipePrefix;
 
@@ -64,6 +68,9 @@ public sealed class DiscordSession
     public string? UserName { get; private set; }
 
     public VoiceSettings? Voice { get; private set; }
+
+    /// <summary>A call em que você está; <c>null</c> fora de call.</summary>
+    public VoiceChannelInfo? VoiceChannel { get; private set; }
 
     public string ClientId => _store.ClientId;
 
@@ -161,6 +168,85 @@ public sealed class DiscordSession
         return rpc.SubscribeAsync(evt, args, cancellationToken);
     }
 
+    public async Task<IReadOnlyList<Guild>> GetGuildsAsync(CancellationToken cancellationToken = default) =>
+        GuildParsing.ParseGuilds(await SendAsync("GET_GUILDS", cancellationToken: cancellationToken).ConfigureAwait(false));
+
+    public async Task<IReadOnlyList<Channel>> GetChannelsAsync(string guildId, CancellationToken cancellationToken = default) =>
+        GuildParsing.ParseChannels(await SendAsync("GET_CHANNELS", new JsonObject { ["guild_id"] = guildId }, cancellationToken)
+            .ConfigureAwait(false));
+
+    /// <summary>Entra na call (<paramref name="channelId"/>) ou sai dela (<c>null</c>).</summary>
+    public async Task SelectVoiceChannelAsync(string? channelId, CancellationToken cancellationToken = default)
+    {
+        await SendAsync("SELECT_VOICE_CHANNEL", new JsonObject { ["channel_id"] = channelId, ["force"] = true }, cancellationToken)
+            .ConfigureAwait(false);
+        if (_rpc is { } rpc)
+            await RefreshVoiceChannelAsync(rpc, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>Volume (0-200) e/ou mute local de alguém na call.</summary>
+    public async Task SetUserVoiceSettingsAsync(string userId, double? volume, bool? mute, CancellationToken cancellationToken = default)
+    {
+        var args = new JsonObject { ["user_id"] = userId };
+        if (volume is { } v)
+            args["volume"] = Math.Clamp(v, 0, 200);
+        if (mute is { } m)
+            args["mute"] = m;
+        await SendAsync("SET_USER_VOICE_SETTINGS", args, cancellationToken).ConfigureAwait(false);
+        if (_rpc is { } rpc)
+            await RefreshVoiceChannelAsync(rpc, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Relê a call atual e passa a ouvir quem entra, sai ou muda nela (VOICE_STATE_* são por canal).
+    /// </summary>
+    private async Task RefreshVoiceChannelAsync(RpcClient rpc, CancellationToken cancellationToken)
+    {
+        await _channelLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var channel = VoiceChannelInfo.Parse(await rpc.SendAsync("GET_SELECTED_VOICE_CHANNEL", cancellationToken: cancellationToken)
+                .ConfigureAwait(false));
+            if (channel?.Id != _watchedChannelId)
+            {
+                if (_watchedChannelId is { } old)
+                {
+                    foreach (var evt in VoiceStateEvents)
+                        await rpc.UnsubscribeAsync(evt, new JsonObject { ["channel_id"] = old }, cancellationToken).ConfigureAwait(false);
+                }
+                _watchedChannelId = channel?.Id;
+                if (channel is not null)
+                {
+                    foreach (var evt in VoiceStateEvents)
+                        await rpc.SubscribeAsync(evt, new JsonObject { ["channel_id"] = channel.Id }, cancellationToken).ConfigureAwait(false);
+                }
+            }
+            VoiceChannel = channel;
+            RaiseChanged();
+        }
+        finally
+        {
+            _channelLock.Release();
+        }
+    }
+
+    private void RefreshVoiceChannelInBackground()
+    {
+        if (_rpc is not { } rpc)
+            return;
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await RefreshVoiceChannelAsync(rpc, CancellationToken.None).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is DiscordRpcException or IOException or TimeoutException or ObjectDisposedException)
+            {
+                _logger.LogDebug(ex, "Discord: não deu para reler a call");
+            }
+        });
+    }
+
     private async Task RunAsync(CancellationToken stopping)
     {
         var retry = MinRetry;
@@ -192,7 +278,9 @@ public sealed class DiscordSession
 
                 Voice = VoiceSettings.Parse(await rpc.SendAsync("GET_VOICE_SETTINGS", cancellationToken: ct).ConfigureAwait(false));
                 await rpc.SubscribeAsync("VOICE_SETTINGS_UPDATE", cancellationToken: ct).ConfigureAwait(false);
+                await rpc.SubscribeAsync("VOICE_CHANNEL_SELECT", cancellationToken: ct).ConfigureAwait(false);
                 _rpc = rpc;
+                await RefreshVoiceChannelAsync(rpc, ct).ConfigureAwait(false);
                 retry = MinRetry;
                 SetState(DiscordState.Ready);
 
@@ -224,6 +312,8 @@ public sealed class DiscordSession
             {
                 _rpc = null;
                 Voice = null;
+                VoiceChannel = null;
+                _watchedChannelId = null;
                 if (rpc is not null)
                 {
                     rpc.EventReceived -= OnEvent;
@@ -342,6 +432,8 @@ public sealed class DiscordSession
     {
         if (evt == "VOICE_SETTINGS_UPDATE")
             UpdateVoice(data);
+        else if (evt is "VOICE_CHANNEL_SELECT" or "VOICE_STATE_CREATE" or "VOICE_STATE_UPDATE" or "VOICE_STATE_DELETE")
+            RefreshVoiceChannelInBackground();
         try
         {
             EventReceived?.Invoke(evt, data);

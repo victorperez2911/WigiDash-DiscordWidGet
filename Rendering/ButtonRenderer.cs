@@ -21,6 +21,9 @@ public sealed record ButtonVisual(string Glyph, string Label)
 
     /// <summary>Desenha apagado (Discord desconectado, falta configurar).</summary>
     public bool Dimmed { get; init; }
+
+    /// <summary>Barra de nível no rodapé (volume), de 0 a 1. <c>null</c> = sem barra.</summary>
+    public double? Level { get; init; }
 }
 
 /// <summary>Desenha um <see cref="ButtonVisual"/> no tamanho do widget, com as cores e fontes do tema.</summary>
@@ -73,6 +76,16 @@ public static class ButtonRenderer
                 using var brush = new SolidBrush(Blend(foreground, background, 0.25));
                 g.DrawString(visual.Detail, detailFont, brush,
                     new RectangleF(4, y + labelHeight, size.Width - 8, labelHeight), Centered);
+            }
+
+            if (visual.Level is { } level)
+            {
+                var inset = Math.Max(theme.CornerRadius / 2, 6);
+                var track = new RectangleF(inset, size.Height - 7, size.Width - inset * 2, 4);
+                using var trackBrush = new SolidBrush(Blend(background, foreground, 0.2));
+                using var fillBrush = new SolidBrush(foreground);
+                g.FillRectangle(trackBrush, track);
+                g.FillRectangle(fillBrush, track with { Width = (float)(track.Width * Math.Clamp(level, 0, 1)) });
             }
         }
         return ToFrame(bitmap);

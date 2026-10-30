@@ -1,0 +1,227 @@
+using System.Text.Json.Nodes;
+using OpenWigi.Sdk;
+using WigiDash.DiscordWidget.Discord;
+using WigiDash.DiscordWidget.Widgets;
+
+namespace DiscordWidget.Tests;
+
+/// <summary>Canais, dispositivos e volumes contra um Discord simulado com estado de call.</summary>
+[Collection(nameof(SessionOverrideCollection))]
+public sealed class ChannelAudioWidgetTests : IAsyncLifetime
+{
+    private readonly string _dir = Path.Combine(Path.GetTempPath(), "discordwidget-tests-" + Guid.NewGuid().ToString("N"));
+    private readonly FakeDiscord _discord = new();
+    private DiscordSession _session = null!;
+
+    private string? _channelId;
+    private string? _textChannelId;
+    private string _inputDevice = "default";
+    private double _outputVolume = 100;
+    private double _friendVolume = 100;
+    private bool _friendMuted;
+
+    private JsonNode Voice()
+    {
+        var json = Json.VoiceSettings();
+        json["input"]!["device_id"] = _inputDevice;
+        json["output"]!["volume"] = _outputVolume;
+        return json;
+    }
+
+    private JsonNode? SelectedChannel() => _channelId is null
+        ? null
+        : JsonNode.Parse($$"""
+            {
+              "id": "{{_channelId}}", "name": "Geral", "guild_id": "g1",
+              "voice_states": [
+                { "nick": null, "mute": {{(_friendMuted ? "true" : "false")}}, "volume": {{_friendVolume}},
+                  "voice_state": { "self_mute": false, "self_deaf": false },
+                  "user": { "id": "u2", "username": "amigo", "global_name": "Amigo" } },
+                { "mute": false, "volume": 100, "voice_state": { "self_mute": true },
+                  "user": { "id": "u1", "username": "tester" } }
+              ]
+            }
+            """);
+
+    public Task InitializeAsync()
+    {
+        _discord.Handler = (cmd, args) =>
+        {
+            switch (cmd)
+            {
+                case "SET_VOICE_SETTINGS":
+                    if (args["input"]?["device_id"] is { } device) _inputDevice = (string)device!;
+                    if (args["output"]?["volume"] is { } volume) _outputVolume = (double)volume;
+                    return Voice();
+                case "GET_VOICE_SETTINGS":
+                    return Voice();
+                case "GET_SELECTED_VOICE_CHANNEL":
+                    return SelectedChannel();
+                case "SELECT_VOICE_CHANNEL":
+                    _channelId = (string?)args["channel_id"];
+                    return SelectedChannel();
+                case "SELECT_TEXT_CHANNEL":
+                    _textChannelId = (string?)args["channel_id"];
+                    return new JsonObject();
+                case "SET_USER_VOICE_SETTINGS":
+                    if (args["volume"] is { } v) _friendVolume = (double)v;
+                    if (args["mute"] is { } m) _friendMuted = (bool)m;
+                    return new JsonObject();
+                case "GET_GUILDS":
+                    return JsonNode.Parse("""{ "guilds": [ { "id": "g1", "name": "Servidor" } ] }""");
+                case "GET_CHANNELS":
+                    return JsonNode.Parse("""
+                        { "channels": [ { "id": "c1", "name": "Geral", "type": 2 }, { "id": "t1", "name": "chat", "type": 0 } ] }
+                        """);
+                default:
+                    return new JsonObject();
+            }
+        };
+        var store = new AccountStore(Path.Combine(_dir, "account.json"));
+        store.SaveToken(new DiscordToken("access", "refresh", DateTimeOffset.UtcNow.AddDays(1), "rpc"));
+        _session = new DiscordSession(store, TimeProvider.System, _discord.Prefix);
+        DiscordButtonInstance.SessionOverride = _session;
+        return Task.CompletedTask;
+    }
+
+    private async Task<T> CreateAsync<T>(DiscordWidgetBase widget, WidgetSize? size = null) where T : DiscordButtonInstance
+    {
+        var instance = (T)await widget.CreateInstanceAsync(new FakeContext(size ?? WidgetSize.Small), CancellationToken.None);
+        await FakeDiscord.WaitUntilAsync(() => _session.State == DiscordState.Ready);
+        return instance;
+    }
+
+    private static ValueTask Tap(IWidgetInstance instance, int x = 10) =>
+        instance.OnTouchAsync(new TouchEvent(TouchKind.Tap, x, 10, TimeSpan.Zero), CancellationToken.None);
+
+    [Fact]
+    public async Task Servidores_e_canais_vem_do_Discord()
+    {
+        await using var widget = await CreateAsync<ChannelInstance>(new VoiceChannelWidget());
+
+        var guilds = await _session.GetGuildsAsync();
+        var channels = await _session.GetChannelsAsync("g1");
+
+        Assert.Equal("Servidor", Assert.Single(guilds).Name);
+        Assert.Equal(["Geral"], channels.Where(c => c.IsVoice).Select(c => c.Name));
+        Assert.Equal(["chat"], channels.Where(c => c.IsText).Select(c => c.Name));
+    }
+
+    [Fact]
+    public async Task Voice_Channel_entra_mostra_quantos_e_sai_no_segundo_toque()
+    {
+        await using var widget = await CreateAsync<ChannelInstance>(new VoiceChannelWidget());
+        Assert.Equal("Escolha o canal", widget.CurrentVisual().Detail);
+        await widget.SaveOptionsAsync(new ChannelOptions { GuildId = "g1", GuildName = "Servidor", ChannelId = "c1", ChannelName = "Geral" });
+
+        await Tap(widget);
+
+        Assert.Equal("c1", _channelId);
+        await FakeDiscord.WaitUntilAsync(() => _session.VoiceChannel?.Id == "c1");
+        Assert.Equal("2 pessoas na call", widget.CurrentVisual().Detail);
+        Assert.NotNull(widget.CurrentVisual().Accent);
+
+        await Tap(widget);
+        Assert.Null(_channelId);
+        await FakeDiscord.WaitUntilAsync(() => _session.VoiceChannel is null);
+    }
+
+    [Fact]
+    public async Task Entrar_numa_call_assina_os_eventos_de_voz_daquele_canal()
+    {
+        _channelId = "c1";
+        await using var widget = await CreateAsync<ChannelInstance>(new VoiceChannelWidget());
+
+        await FakeDiscord.WaitUntilAsync(() => _discord.Commands.Any(c =>
+            (string?)c["cmd"] == "SUBSCRIBE" && (string?)c["evt"] == "VOICE_STATE_UPDATE" && (string?)c["args"]!["channel_id"] == "c1"));
+    }
+
+    [Fact]
+    public async Task Text_Channel_abre_o_canal()
+    {
+        await using var widget = await CreateAsync<ChannelInstance>(new TextChannelWidget());
+        await widget.SaveOptionsAsync(new ChannelOptions { GuildId = "g1", ChannelId = "t1", ChannelName = "chat" });
+
+        await Tap(widget);
+
+        Assert.Equal("t1", _textChannelId);
+        Assert.Equal("#chat", widget.CurrentVisual().Label);
+    }
+
+    [Fact]
+    public async Task Set_Audio_Device_troca_a_entrada_e_marca_em_uso()
+    {
+        await using var widget = await CreateAsync<SetAudioDeviceInstance>(new SetAudioDeviceWidget());
+        await widget.SaveOptionsAsync(new AudioDeviceOptions { Side = AudioSide.Input, InputId = "mic2", InputName = "Shure" });
+        Assert.Equal("Toque para usar", widget.CurrentVisual().Detail);
+
+        await Tap(widget);
+
+        Assert.Equal("mic2", _inputDevice);
+        Assert.Equal("Em uso", widget.CurrentVisual().Detail);
+    }
+
+    [Fact]
+    public async Task Volume_no_2x1_esquerda_abaixa_e_direita_aumenta()
+    {
+        await using var widget = await CreateAsync<VolumeControlInstance>(new VolumeControlWidget(), WidgetSize.Wide);
+        await widget.SaveOptionsAsync(new VolumeOptions { Side = AudioSide.Output, Step = 10 });
+
+        await Tap(widget, x: 10);
+        Assert.Equal(90, _outputVolume);
+
+        await Tap(widget, x: WidgetSize.Wide.PixelSize.Width - 10);
+        await Tap(widget, x: WidgetSize.Wide.PixelSize.Width - 10);
+        Assert.Equal(110, _outputVolume);
+        Assert.Equal("110%", widget.CurrentVisual().Label);
+    }
+
+    [Fact]
+    public async Task Volume_definir_usa_o_valor_e_respeita_o_limite()
+    {
+        await using var widget = await CreateAsync<VolumeControlInstance>(new VolumeControlWidget());
+        await widget.SaveOptionsAsync(new VolumeOptions { Side = AudioSide.Output, Action = VolumeAction.Set, Value = 250 });
+
+        await Tap(widget);
+
+        Assert.Equal(200, _outputVolume);
+    }
+
+    [Fact]
+    public async Task User_Volume_ajusta_e_muta_a_pessoa_da_call()
+    {
+        _channelId = "c1";
+        await using var widget = await CreateAsync<UserVolumeInstance>(new UserVolumeWidget());
+        await FakeDiscord.WaitUntilAsync(() => _session.VoiceChannel is not null);
+        await widget.SaveOptionsAsync(new UserVolumeOptions { UserId = "u2", UserName = "Amigo", Step = -20 });
+        Assert.Equal("Amigo", widget.CurrentVisual().Label);
+
+        await Tap(widget);
+        Assert.Equal(80, _friendVolume);
+        await FakeDiscord.WaitUntilAsync(() => widget.CurrentVisual().Detail == "80%");
+
+        await widget.SaveOptionsAsync(widget.Options with { Action = VolumeAction.ToggleMute });
+        await Tap(widget);
+        Assert.True(_friendMuted);
+        await FakeDiscord.WaitUntilAsync(() => widget.CurrentVisual().Detail == "Mutado para você");
+    }
+
+    [Fact]
+    public async Task User_Volume_fora_da_call_fica_apagado()
+    {
+        await using var widget = await CreateAsync<UserVolumeInstance>(new UserVolumeWidget());
+        await widget.SaveOptionsAsync(new UserVolumeOptions { UserId = "u2", UserName = "Amigo" });
+
+        Assert.Equal("Fora da call", widget.CurrentVisual().Detail);
+        Assert.True(widget.CurrentVisual().Dimmed);
+    }
+
+    public async Task DisposeAsync()
+    {
+        DiscordButtonInstance.SessionOverride = null;
+        await FakeDiscord.WaitUntilAsync(() => _session.State == DiscordState.Stopped);
+        await _discord.DisposeAsync();
+        if (Directory.Exists(_dir))
+            Directory.Delete(_dir, recursive: true);
+    }
+}

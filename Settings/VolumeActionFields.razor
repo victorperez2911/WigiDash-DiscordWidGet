@@ -1,0 +1,33 @@
+@* Ação de volume (ajustar, definir, mutar) com passo e valor; comum a Volume Control e User Volume Control. *@
+<MudSelect T="VolumeAction" Value="Action" ValueChanged="a => Changed.InvokeAsync((a, Step, Value))"
+           Label="Ao tocar" Variant="Variant.Outlined" Style="max-width: 320px">
+    <MudSelectItem Value="VolumeAction.Adjust">Ajustar o volume</MudSelectItem>
+    <MudSelectItem Value="VolumeAction.Set">Definir o volume</MudSelectItem>
+    @if (AllowMute)
+    {
+        <MudSelectItem Value="VolumeAction.ToggleMute">Mutar / desmutar</MudSelectItem>
+        <MudSelectItem Value="VolumeAction.Mute">Mutar</MudSelectItem>
+        <MudSelectItem Value="VolumeAction.Unmute">Desmutar</MudSelectItem>
+    }
+</MudSelect>
+@if (Action == VolumeAction.Adjust)
+{
+    <MudSlider T="int" Value="Step" ValueChanged="s => Changed.InvokeAsync((Action, s, Value))" Min="-50" Max="50" Step="5" Color="Color.Primary">
+        Passo: @(Step > 0 ? "+" : "")@Step% por toque (no 2x1, esquerda abaixa e direita aumenta)
+    </MudSlider>
+}
+@if (Action == VolumeAction.Set)
+{
+    <MudSlider T="int" Value="Value" ValueChanged="v => Changed.InvokeAsync((Action, Step, v))" Min="0" Max="Max" Step="5" Color="Color.Primary">
+        Volume: @Value%
+    </MudSlider>
+}
+
+@code {
+    [Parameter] public VolumeAction Action { get; set; }
+    [Parameter] public int Step { get; set; }
+    [Parameter] public int Value { get; set; }
+    [Parameter] public int Max { get; set; } = 200;
+    [Parameter] public bool AllowMute { get; set; }
+    [Parameter] public EventCallback<(VolumeAction Action, int Step, int Value)> Changed { get; set; }
+}
