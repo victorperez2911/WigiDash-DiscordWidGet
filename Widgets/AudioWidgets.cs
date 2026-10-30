@@ -97,7 +97,7 @@ public sealed class SetAudioDeviceInstance(IWidgetContext context) : DiscordOpti
         };
         return new ButtonVisual(Glyph, name ?? Label)
         {
-            Accent = active ? ButtonRenderer.DiscordBlurple : null,
+            Accent = active ? ButtonRenderer.Success : null,
             Detail = active ? "Em uso" : "Toque para usar",
         };
     }

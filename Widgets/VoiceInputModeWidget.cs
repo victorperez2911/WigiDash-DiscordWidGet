@@ -27,7 +27,7 @@ public sealed class VoiceInputModeInstance(IWidgetContext context) : DiscordButt
     protected override string Label => "Modo de voz";
 
     protected override ButtonVisual GetVisual() => Session.Voice?.Mode == VoiceMode.PushToTalk
-        ? new ButtonVisual(Glyphs.Switch, "Push to Talk") { Accent = ButtonRenderer.DiscordBlurple, Detail = "Modo de voz" }
+        ? new ButtonVisual(Glyphs.Switch, "Push to Talk") { Accent = ButtonRenderer.Success, Detail = "Modo de voz" }
         : new ButtonVisual(Glyphs.Switch, "Detecção de voz") { Detail = "Modo de voz" };
 
     protected override async Task OnReadyTouchAsync(TouchEvent touch, CancellationToken cancellationToken)

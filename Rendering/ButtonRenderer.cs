@@ -13,7 +13,7 @@ namespace WigiDash.DiscordWidget.Rendering;
 /// </summary>
 public sealed record ButtonVisual(string Glyph, string Label)
 {
-    /// <summary>Cor de fundo do estado "ligado" (ex.: vermelho quando mutado). <c>null</c> = fundo do tema.</summary>
+    /// <summary>Cor de fundo do estado (verde ativo, vermelho mutado). <c>null</c> = azul do Discord.</summary>
     public Color? Accent { get; init; }
 
     /// <summary>Segunda linha, menor (ex.: nome do canal, volume).</summary>
@@ -53,7 +53,9 @@ public static class ButtonRenderer
             g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
             g.Clear(Color.Black);
 
-            var background = visual.Accent ?? ToColor(theme.PrimaryBackground);
+            // Padrão visual das imagens do plugin da Elgato: fundo azul do Discord; verde quando a ação está
+            // ativa e vermelho quando algo está cortado (mutado, ensurdecido) vêm em Accent.
+            var background = visual.Accent ?? DiscordBlurple;
             var foreground = ToColor(theme.PrimaryForeground);
             if (visual.Dimmed)
             {

@@ -135,7 +135,7 @@ public sealed class NotificationsInstance(IWidgetContext context) : DiscordOptio
         var position = _index is { } i ? $"{Math.Clamp(i, 0, list.Count - 1) + 1}/{list.Count}" : $"{list.Count}";
         return new ButtonVisual(Glyph, $"{position}  {shown.Title}")
         {
-            Accent = ButtonRenderer.DiscordBlurple,
+            Accent = ButtonRenderer.Success,
             Detail = shown.Body,
         };
     }
