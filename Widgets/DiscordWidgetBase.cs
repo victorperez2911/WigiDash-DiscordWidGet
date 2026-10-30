@@ -70,7 +70,10 @@ public abstract class DiscordButtonInstance : IWidgetInstance
 
     protected IWidgetContext Context { get; }
 
-    public DiscordSession Session => DiscordSession.Shared;
+    /// <summary>Os testes trocam pela sessão ligada ao Discord simulado.</summary>
+    internal static DiscordSession? SessionOverride { get; set; }
+
+    public DiscordSession Session { get; } = SessionOverride ?? DiscordSession.Shared;
 
     /// <summary>Algo que a tela de configurações mostra mudou (sessão ou configuração do widget).</summary>
     public event Action? Changed;
