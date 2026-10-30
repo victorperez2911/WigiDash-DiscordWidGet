@@ -1,0 +1,54 @@
+@* Dispositivos para o widget Set Audio Device. A lista vem do próprio Discord (available_devices). *@
+<MudStack Spacing="2">
+    @if (Voice is null)
+    {
+        <MudText Typo="Typo.caption" Color="Color.Warning">Conecte o Discord para ver os dispositivos.</MudText>
+    }
+    <MudSelect T="AudioSide" Value="Instance.Options.Side" ValueChanged="v => Save(Instance.Options with { Side = v })"
+               Label="Trocar" Variant="Variant.Outlined" Style="max-width: 320px">
+        <MudSelectItem Value="AudioSide.Input">Só a entrada (microfone)</MudSelectItem>
+        <MudSelectItem Value="AudioSide.Output">Só a saída</MudSelectItem>
+        <MudSelectItem Value="AudioSide.Both">Entrada e saída</MudSelectItem>
+    </MudSelect>
+    @if (Instance.Options.Side != AudioSide.Output)
+    {
+        <MudSelect T="string" Value="Instance.Options.InputId" ValueChanged="SelectInput" Label="Entrada"
+                   Variant="Variant.Outlined" Disabled="@(Voice is null)" Style="min-width: 320px">
+            @foreach (var device in Voice?.Input.Devices ?? [])
+            {
+                <MudSelectItem Value="@device.Id">@device.Name</MudSelectItem>
+            }
+        </MudSelect>
+    }
+    @if (Instance.Options.Side != AudioSide.Input)
+    {
+        <MudSelect T="string" Value="Instance.Options.OutputId" ValueChanged="SelectOutput" Label="Saída"
+                   Variant="Variant.Outlined" Disabled="@(Voice is null)" Style="min-width: 320px">
+            @foreach (var device in Voice?.Output.Devices ?? [])
+            {
+                <MudSelectItem Value="@device.Id">@device.Name</MudSelectItem>
+            }
+        </MudSelect>
+    }
+</MudStack>
+
+@code {
+    [Parameter, EditorRequired]
+    public SetAudioDeviceInstance Instance { get; set; } = default!;
+
+    private VoiceSettings? Voice => Instance.Session.Voice;
+
+    private Task SelectInput(string id) => Save(Instance.Options with
+    {
+        InputId = id,
+        InputName = Voice?.Input.Devices.FirstOrDefault(d => d.Id == id)?.Name,
+    });
+
+    private Task SelectOutput(string id) => Save(Instance.Options with
+    {
+        OutputId = id,
+        OutputName = Voice?.Output.Devices.FirstOrDefault(d => d.Id == id)?.Name,
+    });
+
+    private Task Save(AudioDeviceOptions options) => Instance.SaveOptionsAsync(options);
+}

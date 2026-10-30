@@ -1,0 +1,80 @@
+@* Servidor e canal (de voz ou de texto) para os widgets Voice Channel e Text Channel. *@
+<MudStack Spacing="2">
+    @if (!Ready)
+    {
+        <MudText Typo="Typo.caption" Color="Color.Warning">Conecte o Discord para escolher o canal.</MudText>
+    }
+    <MudSelect T="string" Value="Instance.Options.GuildId" ValueChanged="SelectGuild" Label="Servidor"
+               Variant="Variant.Outlined" Disabled="@(!Ready)" Style="min-width: 320px">
+        @foreach (var guild in _guilds)
+        {
+            <MudSelectItem Value="@guild.Id">@guild.Name</MudSelectItem>
+        }
+    </MudSelect>
+    <MudSelect T="string" Value="Instance.Options.ChannelId" ValueChanged="SelectChannel"
+               Label="@(Instance.IsVoice ? "Canal de voz" : "Canal de texto")"
+               Variant="Variant.Outlined" Disabled="@(!Ready || _channels.Count == 0)" Style="min-width: 320px">
+        @foreach (var channel in _channels)
+        {
+            <MudSelectItem Value="@channel.Id">@(Instance.IsVoice ? channel.Name : "#" + channel.Name)</MudSelectItem>
+        }
+    </MudSelect>
+    @if (_error is not null)
+    {
+        <MudText Typo="Typo.caption" Color="Color.Error">@_error</MudText>
+    }
+</MudStack>
+
+@code {
+    [Parameter, EditorRequired]
+    public ChannelInstance Instance { get; set; } = default!;
+
+    private IReadOnlyList<Guild> _guilds = [];
+    private IReadOnlyList<Channel> _channels = [];
+    private string? _error;
+
+    private bool Ready => Instance.Session.State == DiscordState.Ready;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!Ready)
+            return;
+        await Load(async () =>
+        {
+            _guilds = await Instance.Session.GetGuildsAsync();
+            if (Instance.Options.GuildId is { } guildId)
+                _channels = await LoadChannels(guildId);
+        });
+    }
+
+    private async Task SelectGuild(string guildId)
+    {
+        var guild = _guilds.FirstOrDefault(g => g.Id == guildId);
+        await Instance.SaveOptionsAsync(new ChannelOptions { GuildId = guildId, GuildName = guild?.Name });
+        await Load(async () => _channels = await LoadChannels(guildId));
+    }
+
+    private async Task SelectChannel(string channelId)
+    {
+        var channel = _channels.FirstOrDefault(c => c.Id == channelId);
+        await Instance.SaveOptionsAsync(Instance.Options with { ChannelId = channelId, ChannelName = channel?.Name });
+    }
+
+    private async Task<IReadOnlyList<Channel>> LoadChannels(string guildId) =>
+        (await Instance.Session.GetChannelsAsync(guildId))
+            .Where(c => Instance.IsVoice ? c.IsVoice : c.IsText)
+            .ToList();
+
+    private async Task Load(Func<Task> action)
+    {
+        try
+        {
+            _error = null;
+            await action();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+    }
+}

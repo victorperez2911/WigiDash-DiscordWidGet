@@ -1,212 +1,69 @@
-# Discord Widget para WigiDash
+# Discord para o WigiDash (OpenWigiDashManager)
 
-Widget multi-ação para integração do Discord com o hardware WigiDash da G.SKILL.
+Plugin com 15 widgets que controlam o Discord aberto no PC a partir do painel WigiDash da G.SKILL, no
+[OpenWigiDashManager](https://github.com/victorperez2911/OpenWigiDashManager) (.NET 10).
 
-## 🎯 Status do Projeto
+Esta é a branch `net10`. A `main` guarda a tentativa antiga em net472, que parou no erro 4001 do WebSocket.
 
-### ✅ Fase 1: Fundação - COMPLETA
+## Widgets
 
-- [x] Estrutura do projeto criada
-- [x] GUID único gerado: `3035795C-15EC-4B09-859D-27D1178C949C`
-- [x] Implementação base (DiscordWidgetObject e DiscordWidgetInstance)
-- [x] Sistema de ações (interfaces e factory)
-- [x] Gerenciadores Discord (Gateway, RPC, REST) - estrutura inicial
-- [x] Sistema de renderização de bitmaps
-- [x] Autenticação OAuth2 com PKCE
-- [x] Interface de configuração (XAML)
-- [x] Script de deployment
-- [x] Build bem-sucedido (0 erros)
-- [x] Side loading testado com sucesso
+| Widget | O que faz |
+| --- | --- |
+| Mute | Liga e desliga o microfone; vermelho quando mutado |
+| Deafen | Liga e desliga o áudio (ensurdecer) |
+| Push to Talk | Segurar abre o microfone; soltar muta |
+| Push to Mute | Segurar muta; soltar volta como estava |
+| Voice Input Mode | Alterna entre detecção de voz e push to talk |
+| Voice Channel | Entra e sai de um canal de voz; mostra quantos estão na call |
+| Text Channel | Abre um canal de texto |
+| Set Audio Device | Troca o microfone e/ou a saída |
+| Volume Control | Volume de entrada ou saída (no 2x1, esquerda abaixa e direita aumenta) |
+| User Volume Control | Volume ou mute local de alguém da call |
+| Soundboard | Toca um som do soundboard |
+| Notifications | Conta as notificações; abre, limpa ou passa por elas |
+| Server Stats | Membros online e total de um servidor |
+| Video Toggle | Liga e desliga a câmera |
+| Stream Toggle | Liga e desliga a transmissão de tela |
 
-### ⏳ Fase 2: Próximos Passos
+Todos aceitam 1x1 e 2x1 e usam uma conexão só com o Discord.
 
-1. Criar Discord Application no Developer Portal
-2. Configurar OAuth2 e obter Client ID
-3. Implementar primeira ação (Voice Channel Status)
-4. Testar conectividade Discord
+## Como fala com o Discord
 
-## 🚀 Como Fazer Deploy
+Pelo named pipe local `\\.\pipe\discord-ipc-N`, o mesmo transporte do plugin do Discord da Elgato. O pipe usa
+o protocolo RPC do Discord e, ao contrário do WebSocket na porta 6463, não exige Origin aprovada.
 
-### Pré-requisitos
+O login não usa backend nem client_secret:
 
-- .NET SDK instalado
-- WigiDash Manager instalado
-- PowerShell
+1. `AUTHORIZE` pelo pipe com PKCE (S256). O Discord mostra um popup e você clica em Autorizar.
+2. O código é trocado em `oauth2/token` com o `code_verifier`.
+3. `AUTHENTICATE` com o token. O refresh é automático.
 
-### Deploy Rápido
+O token fica criptografado (DPAPI, só o seu usuário do Windows lê) em
+`%LOCALAPPDATA%\OpenWigiDash\WidgetData\Discord\account.json`.
 
-```powershell
-# Build e deploy (WigiDash deve ser fechado manualmente)
-.\deploy.ps1
+## Configuração do app no Discord
 
-# Build, deploy e reinicia WigiDash automaticamente
-.\deploy.ps1 -RestartWigiDash
-```
+O plugin usa um app do [Developer Portal](https://discord.com/developers/applications). Os scopes `rpc.*`
+só são liberados para o dono do app e para quem está no time dele.
 
-### Deploy Manual
+1. Crie um app (ou use um que já seja seu).
+2. Na aba **OAuth2**, ligue **Public Client** e salve.
+3. No WigiDash, abra as configurações de qualquer widget do Discord, expanda **App do Developer Portal** e cole
+   o Client ID.
+4. Clique em **Autorizar no Discord** (ou toque no widget) e confirme no popup.
 
-```powershell
-# 1. Build
-dotnet build -c Release
+## Instalação
 
-# 2. Copiar para pasta do WigiDash
-# Destino: %APPDATA%\G.SKILL\WigiDashManager\Widgets\3035795C-15EC-4B09-859D-27D1178C949C\
-```
+Baixe o zip da última [release](https://github.com/victorperez2911/WigiDash-DiscordWidGet/releases) e
+extraia a pasta `DiscordWidget` em `%LOCALAPPDATA%\OpenWigiDash\Widgets\`. Feche o manager pela bandeja antes
+de trocar a DLL.
 
-## 📋 Ações Planejadas
-
-| Ação | Tipo | API | Status |
-|------|------|-----|--------|
-| Voice Channel | Toggle | RPC + Gateway | ⏳ Planejado |
-| Soundboard | Button | REST | ⏳ Planejado |
-| Mute Toggle | Toggle | RPC | ⏳ Planejado |
-| Deafen Toggle | Toggle | RPC | ⏳ Planejado |
-| Set Audio Device | Selector | RPC | ⏳ Planejado |
-| Server Stats | Display | Gateway | ⏳ Planejado |
-| Video Toggle | Toggle | Placeholder | 🔮 Futuro |
-| Stream Toggle | Toggle | Placeholder | 🔮 Futuro |
-
-## 🔧 Configuração
-
-### Discord Application
-
-Antes de usar, você precisa:
-
-1. Criar uma Discord Application em https://discord.com/developers/applications
-2. Configurar OAuth2 Redirect URI: `http://localhost:8080/callback`
-3. Habilitar Gateway Intents:
-   - ✅ PRESENCE INTENT
-   - ✅ SERVER MEMBERS INTENT (Privilegiado!)
-   - ✅ MESSAGE CONTENT INTENT (opcional)
-4. Copiar o Client ID
-5. Atualizar `DiscordConfig.cs`:
-
-```csharp
-public const string CLIENT_ID = "SEU_CLIENT_ID_AQUI";
-```
-
-### Logo da Aplicação
-
-O logo da aplicação Discord (`discord_app_icon.png`) deve ser:
-
-- **Tamanho:** 512x512 pixels (recomendação Discord)
-- **Formato:** PNG com fundo transparente ou opaco
-- **Localização:** Raiz do projeto
-
-**Como atualizar:**
-
-1. Substitua `discord_app_icon.png` na raiz do projeto
-2. Faça upload no Discord Developer Portal (seção "App Icon")
-
-**Script auxiliar:**
-
-- `create_logo.ps1` - Gera um logo padrão (não sobrescreve se já existir customizado)
-
-## 📁 Estrutura do Projeto
-
-```
-WigiDash-DiscordWidGet/
-├── DiscordWidgetObject.cs              # Factory (IWidgetObject)
-├── DiscordWidgetInstance.cs            # Instance manager
-├── DiscordConfig.cs                    # Configurações
-│
-├── Core/
-│   ├── DiscordGatewayManager.cs        # Discord.Net wrapper
-│   ├── DiscordRPCManager.cs            # Discord RPC local
-│   └── DiscordRESTClient.cs            # Discord REST API
-│
-├── Actions/
-│   ├── IActionHandler.cs               # Interface de ações
-│   ├── ActionContext.cs                # Contexto
-│   └── ActionFactory.cs                # Factory
-│
-├── Rendering/
-│   ├── BitmapRenderer.cs               # Renderização
-│   └── ImageCache.cs                   # Cache de imagens
-│
-├── Authentication/
-│   ├── OAuth2Handler.cs                # OAuth2 flow
-│   └── TokenManager.cs                 # Criptografia de tokens
-│
-├── UI/
-│   ├── DiscordSettingsControl.xaml     # Interface de configuração
-│   └── DiscordSettingsControl.xaml.cs
-│
-└── Resources/
-    └── Icons/                          # Ícones das ações
-```
-
-## 🔌 Dependências
-
-- **victorperez2911.WigiDashWidgetFramework** 1.1.0 - Framework WigiDash
-- **Discord.Net** 2.4.0 - Cliente Discord Gateway
-- **Newtonsoft.Json** 13.0.3 - Serialização JSON
-- **System.Net.WebSockets.Client** 4.3.2 - WebSocket para RPC local
-
-## 📝 Arquitetura
-
-### Triple-API Integration
-
-O widget usa três APIs do Discord de forma complementar:
-
-1. **Discord Gateway API** (via Discord.Net)
-   - Monitoramento de eventos em tempo real
-   - Voice state changes
-   - Server/channel information
-
-2. **Discord RPC Local** (WebSocket)
-   - Controle do cliente Discord instalado
-   - Connect/disconnect voice channels
-   - Mute/unmute/deafen
-   - Audio device selection
-
-3. **Discord REST API**
-   - Soundboard (play sounds)
-   - Operações HTTP diretas
-
-### Action System
-
-Cada tipo de ação é uma classe independente que implementa `IActionHandler`:
-
-```csharp
-public interface IActionHandler
-{
-    Task InitializeAsync(ActionContext context);
-    Task<Bitmap> RenderBitmapAsync(WidgetSize size);
-    Task OnClickAsync(int x, int y);
-    Task<PrerequisiteResult> ValidatePrerequisitesAsync();
-    // ...
-}
-```
-
-## 🛠️ Desenvolvimento
-
-### Build
+## Desenvolvimento
 
 ```powershell
-dotnet build -c Release
+dotnet test tests/DiscordWidget.Tests     # testes contra um Discord simulado no pipe
+.\deploy.ps1 -RestartManager              # build e cópia para a pasta de widgets do usuário
 ```
 
-### Logs
-
-Logs aparecem no WigiDash Manager console e podem ser acessados via `IWidgetManager.WriteLogMessage()`.
-
-### Debug
-
-1. Compile em Debug mode
-2. Anexe Visual Studio ao processo WigiDashManager.exe
-3. Coloque breakpoints no código
-
-## 📚 Referências
-
-- [Discord API](https://discord.com/developers/docs)
-- [Discord.Net Docs](https://docs.discordnet.dev/)
-- [Discord RPC](https://discord.com/developers/docs/topics/rpc)
-
-## 📄 Licença
-
-Copyright © 2026 Victor Perez
-
----
-
-**GUID do Widget:** `3035795C-15EC-4B09-859D-27D1178C949C`
+Para testar contra o SDK local em vez do pacote do nuget.org, compile com `-p:UseLocalOpenWigiSdk=true` e o
+repositório OpenWigiDashManager clonado ao lado deste.

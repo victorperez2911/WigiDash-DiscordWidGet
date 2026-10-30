@@ -1,0 +1,47 @@
+@implements IDisposable
+
+@* Pessoa e ação do widget User Volume Control. A lista é de quem está na sua call agora. *@
+<MudStack Spacing="2">
+    @if (Users.Count == 0)
+    {
+        <MudText Typo="Typo.caption" Color="Color.Warning">
+            Entre numa call no Discord para escolher a pessoa.
+            @if (Instance.Options.UserName is { } name)
+            {
+                <span>Escolhida: @name.</span>
+            }
+        </MudText>
+    }
+    else
+    {
+        <MudSelect T="string" Value="Instance.Options.UserId" ValueChanged="SelectUser" Label="Pessoa"
+                   Variant="Variant.Outlined" Style="min-width: 320px">
+            @foreach (var user in Users)
+            {
+                <MudSelectItem Value="@user.Id">@user.Name</MudSelectItem>
+            }
+        </MudSelect>
+    }
+    <VolumeActionFields Action="Instance.Options.Action" Step="Instance.Options.Step" Value="Instance.Options.Value"
+                        Max="200" AllowMute="true"
+                        Changed="c => Instance.SaveOptionsAsync(Instance.Options with { Action = c.Action, Step = c.Step, Value = c.Value })" />
+</MudStack>
+
+@code {
+    [Parameter, EditorRequired]
+    public UserVolumeInstance Instance { get; set; } = default!;
+
+    private IReadOnlyList<VoiceUser> Users => Instance.Session.VoiceChannel?.Users ?? [];
+
+    protected override void OnInitialized() => Instance.Session.Changed += OnChanged;
+
+    private Task SelectUser(string id) => Instance.SaveOptionsAsync(Instance.Options with
+    {
+        UserId = id,
+        UserName = Users.FirstOrDefault(u => u.Id == id)?.Name,
+    });
+
+    private void OnChanged() => InvokeAsync(StateHasChanged);
+
+    public void Dispose() => Instance.Session.Changed -= OnChanged;
+}
