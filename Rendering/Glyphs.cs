@@ -22,4 +22,6 @@ public static class Glyphs
     public const string Music = "";
     public const string Phone = "";
     public const string HangUp = "";
+    /// <summary>Mão de toque (TouchPointer): o "aperte e segure" do Push to Talk/Mute.</summary>
+    public const string Touch = "";
 }
