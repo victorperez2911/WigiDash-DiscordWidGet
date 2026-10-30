@@ -214,6 +214,34 @@ public abstract class DiscordButtonInstance : IWidgetInstance
         }
     }
 
+    private bool _guildsRequested;
+
+    /// <summary>Logo do servidor (PNG no CDN); na primeira vez pede a lista de servidores ao Discord e redesenha.</summary>
+    protected string? GuildIconUrl(string? guildId)
+    {
+        if (guildId is null)
+            return null;
+        if (Session.FindGuild(guildId) is { } guild)
+            return guild.IconUrl;
+        if (!_guildsRequested && Session.State == DiscordState.Ready)
+        {
+            _guildsRequested = true;
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await Session.GetGuildsAsync().ConfigureAwait(false);
+                    Refresh();
+                }
+                catch (Exception ex) when (ex is DiscordRpcException or InvalidOperationException or TimeoutException)
+                {
+                    _guildsRequested = false;
+                }
+            });
+        }
+        return null;
+    }
+
     /// <summary>Texto curto do retorno de falha; os widgets podem trocar (ex.: som de outro servidor).</summary>
     protected virtual string FailureText(Exception error) => "Falhou";
 

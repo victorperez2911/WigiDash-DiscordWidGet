@@ -60,7 +60,6 @@ public sealed class ChannelInstance(IWidgetContext context, bool voice) : Discor
     private string? _watchedId;
     private int _lastCount = -1;
     private DateTimeOffset _pulseUntil;
-    private bool _guildRequested;
 
     private bool IsInChannel => IsVoice && Options.ChannelId is { } id && Session.VoiceChannel?.Id == id;
 
@@ -106,7 +105,7 @@ public sealed class ChannelInstance(IWidgetContext context, bool voice) : Discor
         WatchArrivals(info is null ? -1 : users.Count, joined);
         var accent = joined ? ButtonRenderer.Success : ButtonRenderer.DiscordBlurple;
         if (users.Count == 0)
-            return new ButtonVisual(Glyphs.Phone, name) { Accent = accent, Detail = "Canal vazio", ImageUrl = GuildIcon() };
+            return new ButtonVisual(Glyphs.Phone, name) { Accent = accent, Detail = "Canal vazio", ImageUrl = GuildIconUrl(Options.GuildId) };
 
         // Alguém entrou e você não está: pisca mais claro por uns segundos para chamar a atenção.
         var now = Context.Host.Time.GetUtcNow();
@@ -147,32 +146,6 @@ public sealed class ChannelInstance(IWidgetContext context, bool voice) : Discor
         catch (OperationCanceledException)
         {
         }
-    }
-
-    /// <summary>Logo do servidor; na primeira vez pede a lista de servidores ao Discord.</summary>
-    private string? GuildIcon()
-    {
-        if (Options.GuildId is not { } guildId)
-            return null;
-        if (Session.FindGuild(guildId) is { } guild)
-            return guild.IconUrl;
-        if (!_guildRequested && Session.State == DiscordState.Ready)
-        {
-            _guildRequested = true;
-            _ = Task.Run(async () =>
-            {
-                try
-                {
-                    await Session.GetGuildsAsync().ConfigureAwait(false);
-                    Refresh();
-                }
-                catch (Exception ex) when (ex is DiscordRpcException or InvalidOperationException or TimeoutException)
-                {
-                    _guildRequested = false;
-                }
-            });
-        }
-        return null;
     }
 
     protected override async Task OnReadyTouchAsync(TouchEvent touch, CancellationToken cancellationToken)

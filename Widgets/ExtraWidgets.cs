@@ -219,9 +219,15 @@ public sealed class ServerStatsInstance : DiscordOptionsInstance<ServerStatsOpti
     {
         if (Options.GuildId is null)
             return new ButtonVisual(Glyph, Label) { Detail = "Escolha o servidor", Dimmed = true };
+        // Logo do servidor no lugar do ícone, para saber de qual servidor são os números.
+        var icon = GuildIconUrl(Options.GuildId);
         if (_counts is not { } counts)
-            return new ButtonVisual(Glyph, Options.GuildName ?? Label) { Detail = "Carregando...", Dimmed = true };
-        return new ButtonVisual(Glyph, $"{counts.Online:N0} online") { Detail = $"{counts.Members:N0} membros · {counts.Name}" };
+            return new ButtonVisual(Glyph, Options.GuildName ?? Label) { ImageUrl = icon, Detail = "Carregando...", Dimmed = true };
+        return new ButtonVisual(Glyph, $"{counts.Online:N0} online")
+        {
+            ImageUrl = icon,
+            Detail = $"{counts.Members:N0} membros · {counts.Name}",
+        };
     }
 
     protected override async Task OnReadyTouchAsync(TouchEvent touch, CancellationToken cancellationToken)
