@@ -30,6 +30,9 @@ public sealed record ButtonVisual(string Glyph, string Label)
 
     /// <summary>Contador no canto superior direito (ex.: pessoas no canal).</summary>
     public int? Badge { get; init; }
+
+    /// <summary>Imagem no lugar do ícone (ex.: emoji do som), baixada pelo <see cref="AvatarCache"/>.</summary>
+    public string? ImageUrl { get; init; }
 }
 
 /// <summary>Um avatar: imagem do CDN (ou a inicial do nome enquanto não chega) e o anel de quem está falando.</summary>
@@ -74,6 +77,24 @@ public static class ButtonRenderer
 
             if (visual.Faces is { Count: > 0 } faces)
                 DrawFaces(g, iconArea, faces, background, size.Columns() > 1 ? 5 : 3);
+            else if (AvatarCache.Get(visual.ImageUrl) is { } image)
+            {
+                var side = Math.Min(iconArea.Height * 0.8f, size.Width * 0.45f);
+                var rect = new RectangleF(iconArea.X + (iconArea.Width - side) / 2, iconArea.Y + (iconArea.Height - side) / 2, side, side);
+                g.InterpolationMode = InterpolationMode.HighQualityBicubic;
+                if (visual.Dimmed)
+                {
+                    using var attributes = new ImageAttributes();
+                    attributes.SetColorMatrix(new ColorMatrix { Matrix33 = 0.4f });
+                    lock (image)
+                        g.DrawImage(image, Rectangle.Round(rect), 0, 0, image.Width, image.Height, GraphicsUnit.Pixel, attributes);
+                }
+                else
+                {
+                    lock (image)
+                        g.DrawImage(image, rect);
+                }
+            }
             else
             {
                 using var iconFont = new Font(IconFont, Math.Min(iconArea.Height * 0.62f, size.Width * 0.4f), GraphicsUnit.Pixel);
@@ -129,8 +150,18 @@ public static class ButtonRenderer
         for (var i = 0; i < shown.Count; i++)
         {
             var rect = new RectangleF(x + step * i, y, d, d);
-            using (var border = new SolidBrush(shown[i].Speaking ? Success : background))
+            if (shown[i].Speaking)
+            {
+                // Anel grosso de quem fala; no fundo verde (você na call) o verde sumiria, então vai branco.
+                var speaking = background.ToArgb() == Success.ToArgb() ? Color.White : Success;
+                using var glow = new SolidBrush(speaking);
+                g.FillEllipse(glow, RectangleF.Inflate(rect, ring * 2, ring * 2));
+            }
+            else
+            {
+                using var border = new SolidBrush(background);
                 g.FillEllipse(border, RectangleF.Inflate(rect, ring, ring));
+            }
             DrawAvatar(g, rect, shown[i]);
         }
 

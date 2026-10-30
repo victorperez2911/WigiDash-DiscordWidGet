@@ -20,6 +20,7 @@ public sealed record SoundboardOptions
     public string? SoundName { get; init; }
     public string? GuildId { get; init; }
     public string? Emoji { get; init; }
+    public string? EmojiId { get; init; }
 }
 
 /// <summary>Toca um som do soundboard na call (PLAY_SOUNDBOARD_SOUND).</summary>
@@ -49,17 +50,21 @@ public sealed class SoundboardInstance(IWidgetContext context) : DiscordOptionsI
     {
         if (Options.SoundId is null)
             return new ButtonVisual(Glyph, Label) { Detail = "Escolha o som", Dimmed = true };
-        var name = string.IsNullOrEmpty(Options.Emoji) ? Options.SoundName : $"{Options.Emoji} {Options.SoundName}";
+        var image = SoundboardSound.EmojiUrl(Options.Emoji, Options.EmojiId);
+        var name = Options.SoundName ?? Label;
         if (_error is not null)
-            return new ButtonVisual(Glyph, name ?? Label) { Accent = ButtonRenderer.Danger, Detail = _error };
+            return new ButtonVisual(Glyph, name) { ImageUrl = image, Accent = ButtonRenderer.Danger, Detail = _error };
+        // Ensurdecido, o Discord não toca o soundboard: o botão fica apagado.
+        if (Session.Voice is { Deaf: true })
+            return new ButtonVisual(Glyph, name) { ImageUrl = image, Detail = "Ensurdecido", Dimmed = true };
         return Session.VoiceChannel is null
-            ? new ButtonVisual(Glyph, name ?? Label) { Detail = "Entre numa call", Dimmed = true }
-            : new ButtonVisual(Glyph, name ?? Label);
+            ? new ButtonVisual(Glyph, name) { ImageUrl = image, Detail = "Entre numa call", Dimmed = true }
+            : new ButtonVisual(Glyph, name) { ImageUrl = image };
     }
 
     protected override async Task OnReadyTouchAsync(TouchEvent touch, CancellationToken cancellationToken)
     {
-        if (touch.Kind != TouchKind.Tap || Options.SoundId is not { } id || Session.VoiceChannel is null)
+        if (touch.Kind != TouchKind.Tap || Options.SoundId is not { } id || Session.VoiceChannel is null || Session.Voice is { Deaf: true })
             return;
         try
         {

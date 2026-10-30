@@ -28,9 +28,27 @@ public sealed record DiscordNotification(string? ChannelId, string Title, string
 /// Som do soundboard (GET_SOUNDBOARD_SOUNDS). Os sons padrão do Discord vêm com <c>guild_id</c> "0" e tocam em
 /// qualquer call; som de servidor só toca em call de outro servidor com Nitro (o Discord responde "Invalid Sound").
 /// </summary>
-public sealed record SoundboardSound(string Id, string Name, string? GuildId, string? Emoji)
+public sealed record SoundboardSound(string Id, string Name, string? GuildId, string? Emoji, string? EmojiId = null)
 {
     public bool IsDefault => IsDefaultGuild(GuildId);
+
+    /// <summary>Imagem colorida do emoji do som: o emoji do servidor no CDN do Discord ou o Twemoji do unicode.</summary>
+    public string? EmojiImageUrl => EmojiUrl(Emoji, EmojiId);
+
+    public static string? EmojiUrl(string? emoji, string? emojiId)
+    {
+        if (!string.IsNullOrEmpty(emojiId))
+            return $"https://cdn.discordapp.com/emojis/{emojiId}.png?size=96";
+        if (string.IsNullOrEmpty(emoji))
+            return null;
+        var codepoints = new List<string>();
+        for (var i = 0; i < emoji.Length; i += char.IsSurrogatePair(emoji, i) ? 2 : 1)
+            codepoints.Add(char.ConvertToUtf32(emoji, i).ToString("x"));
+        // O Twemoji tira o seletor de variação (fe0f) dos nomes sem ZWJ.
+        if (!codepoints.Contains("200d"))
+            codepoints.Remove("fe0f");
+        return $"https://cdn.jsdelivr.net/gh/jdecked/twemoji@15.1.0/assets/72x72/{string.Join('-', codepoints)}.png";
+    }
 
     public static bool IsDefaultGuild(string? guildId) => guildId is null or "0";
 
@@ -54,7 +72,8 @@ public sealed record SoundboardSound(string Id, string Name, string? GuildId, st
                 id,
                 DiscordNotification.Str(sound, "name") ?? id,
                 DiscordNotification.Str(sound, "guild_id"),
-                DiscordNotification.Str(sound, "emoji_name")));
+                DiscordNotification.Str(sound, "emoji_name"),
+                DiscordNotification.Str(sound, "emoji_id")));
         }
         return result;
     }

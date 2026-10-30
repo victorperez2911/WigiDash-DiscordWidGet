@@ -60,6 +60,31 @@ public sealed class ExtraWidgetTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Soundboard_mostra_o_emoji_do_som_e_apaga_quando_ensurdecido()
+    {
+        await using var widget = await CreateAsync<SoundboardInstance>(new SoundboardWidget());
+        await widget.SaveOptionsAsync(new SoundboardOptions { SoundId = "s1", SoundName = "Aplausos", Emoji = "👏" });
+
+        Assert.EndsWith("/72x72/1f44f.png", widget.CurrentVisual().ImageUrl);
+        Assert.False(widget.CurrentVisual().Dimmed);
+
+        await _discord.SendEventAsync("VOICE_SETTINGS_UPDATE", Json.VoiceSettings(mute: true, deaf: true));
+        await FakeDiscord.WaitUntilAsync(() => widget.CurrentVisual().Detail == "Ensurdecido");
+        Assert.True(widget.CurrentVisual().Dimmed);
+
+        await Tap(widget);
+        Assert.DoesNotContain(_discord.Commands, c => (string?)c["cmd"] == "PLAY_SOUNDBOARD_SOUND");
+    }
+
+    [Theory]
+    [InlineData("👏", null, "/72x72/1f44f.png")]
+    [InlineData("❤️", null, "/72x72/2764.png")]
+    [InlineData("👨‍👩‍👧", null, "/72x72/1f468-200d-1f469-200d-1f467.png")]
+    [InlineData(null, "123", "https://cdn.discordapp.com/emojis/123.png?size=96")]
+    public void Url_do_emoji_segue_o_Twemoji_ou_o_CDN_do_Discord(string? emoji, string? emojiId, string expected) =>
+        Assert.EndsWith(expected, SoundboardSound.EmojiUrl(emoji, emojiId));
+
+    [Fact]
     public async Task Soundboard_fora_da_call_nao_toca()
     {
         _inCall = false;
