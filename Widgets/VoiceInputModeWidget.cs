@@ -26,9 +26,10 @@ public sealed class VoiceInputModeInstance(IWidgetContext context) : DiscordButt
     protected override string Glyph => Glyphs.Switch;
     protected override string Label => "Modo de voz";
 
+    // O ícone diz o modo atual: microfone com a mão de toque (push to talk) ou com ondas de som (detecção de voz).
     protected override ButtonVisual GetVisual() => Session.Voice?.Mode == VoiceMode.PushToTalk
-        ? new ButtonVisual(Glyphs.Switch, "Push to Talk") { Accent = ButtonRenderer.DiscordBlurple, Detail = "Modo de voz" }
-        : new ButtonVisual(Glyphs.Switch, "Detecção de voz") { Detail = "Modo de voz" };
+        ? new ButtonVisual(Glyphs.Microphone, "Push to Talk") { Accent = ButtonRenderer.Success, GlyphBadge = Glyphs.Touch, Detail = "Modo de voz" }
+        : new ButtonVisual(Glyphs.Microphone, "Detecção de voz") { GlyphBadge = Glyphs.Volume, Detail = "Modo de voz" };
 
     protected override async Task OnReadyTouchAsync(TouchEvent touch, CancellationToken cancellationToken)
     {

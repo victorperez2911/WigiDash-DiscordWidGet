@@ -3,7 +3,8 @@ using System.Text.Json;
 namespace WigiDash.DiscordWidget.Discord;
 
 /// <summary>Servidor, como vem em GET_GUILDS.</summary>
-public sealed record Guild(string Id, string Name);
+/// <summary>Servidor, como vem em GET_GUILDS. <see cref="IconUrl"/> em PNG (o GDI+ não lê WebP).</summary>
+public sealed record Guild(string Id, string Name, string? IconUrl = null);
 
 /// <summary>Tipos de canal do Discord que o plugin usa.</summary>
 public enum ChannelKind
@@ -22,8 +23,12 @@ public sealed record Channel(string Id, string Name, ChannelKind Kind)
     public bool IsText => Kind is ChannelKind.Text or ChannelKind.Announcement;
 }
 
-/// <summary>Alguém na call, com o volume e o mute que <b>você</b> deu a essa pessoa (SET_USER_VOICE_SETTINGS).</summary>
-public sealed record VoiceUser(string Id, string Name, double Volume, bool LocallyMuted, bool SelfMuted, bool SelfDeafened);
+/// <summary>
+/// Alguém na call, com o volume e o mute que <b>você</b> deu a essa pessoa (SET_USER_VOICE_SETTINGS) e o avatar
+/// no CDN do Discord.
+/// </summary>
+public sealed record VoiceUser(string Id, string Name, double Volume, bool LocallyMuted, bool SelfMuted, bool SelfDeafened,
+    string? AvatarUrl = null);
 
 /// <summary>A call em que você está (GET_SELECTED_VOICE_CHANNEL).</summary>
 public sealed record VoiceChannelInfo(string Id, string Name, string? GuildId, IReadOnlyList<VoiceUser> Users)
@@ -57,7 +62,19 @@ public sealed record VoiceChannelInfo(string Id, string Name, string? GuildId, I
             state.TryGetProperty("volume", out var volume) && volume.ValueKind == JsonValueKind.Number ? volume.GetDouble() : 100,
             Bool(state, "mute"),
             voice.ValueKind == JsonValueKind.Object && (Bool(voice, "self_mute") || Bool(voice, "mute")),
-            voice.ValueKind == JsonValueKind.Object && (Bool(voice, "self_deaf") || Bool(voice, "deaf")));
+            voice.ValueKind == JsonValueKind.Object && (Bool(voice, "self_deaf") || Bool(voice, "deaf")),
+            AvatarUrl(Str(user, "id"), Str(user, "avatar")));
+    }
+
+    /// <summary>Avatar de 64 px; sem avatar próprio, o padrão do Discord ((id >> 22) % 6).</summary>
+    internal static string? AvatarUrl(string? userId, string? avatar)
+    {
+        if (userId is null)
+            return null;
+        if (avatar is not null)
+            return $"https://cdn.discordapp.com/avatars/{userId}/{avatar}.png?size=64";
+        var index = ulong.TryParse(userId, out var id) ? (id >> 22) % 6 : 0;
+        return $"https://cdn.discordapp.com/embed/avatars/{index}.png";
     }
 
     private static string? Str(JsonElement e, string name) =>
@@ -71,10 +88,23 @@ public sealed record VoiceChannelInfo(string Id, string Name, string? GuildId, I
 
 internal static class GuildParsing
 {
+    /// <summary>O Discord manda o ícone em .webp; o CDN entrega o mesmo em .png, que o GDI+ desenha.</summary>
+    internal static string? IconPng(string? url)
+    {
+        if (string.IsNullOrEmpty(url))
+            return null;
+        var query = url.IndexOf('?');
+        var path = query >= 0 ? url[..query] : url;
+        if (path.EndsWith(".webp", StringComparison.OrdinalIgnoreCase))
+            path = path[..^5] + ".png";
+        return path + "?size=128";
+    }
+
     public static IReadOnlyList<Guild> ParseGuilds(JsonElement data) =>
         data.TryGetProperty("guilds", out var guilds) && guilds.ValueKind == JsonValueKind.Array
             ? guilds.EnumerateArray()
-                .Select(g => new Guild(g.GetProperty("id").GetString()!, g.GetProperty("name").GetString() ?? string.Empty))
+                .Select(g => new Guild(g.GetProperty("id").GetString()!, g.GetProperty("name").GetString() ?? string.Empty,
+                    IconPng(g.TryGetProperty("icon_url", out var icon) && icon.ValueKind == JsonValueKind.String ? icon.GetString() : null)))
                 .ToList()
             : [];
 

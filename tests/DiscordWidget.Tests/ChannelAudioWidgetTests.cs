@@ -1,6 +1,7 @@
 using System.Text.Json.Nodes;
 using OpenWigi.Sdk;
 using WigiDash.DiscordWidget.Discord;
+using WigiDash.DiscordWidget.Rendering;
 using WigiDash.DiscordWidget.Widgets;
 
 namespace DiscordWidget.Tests;
@@ -28,20 +29,21 @@ public sealed class ChannelAudioWidgetTests : IAsyncLifetime
         return json;
     }
 
-    private JsonNode? SelectedChannel() => _channelId is null
-        ? null
-        : JsonNode.Parse($$"""
+    private JsonNode? SelectedChannel() => _channelId is null ? null : Channel(_channelId);
+
+    /// <summary>O canal c1 com o Amigo e você, esteja você nele ou não (GET_CHANNEL).</summary>
+    private JsonNode Channel(string id) => JsonNode.Parse($$"""
             {
-              "id": "{{_channelId}}", "name": "Geral", "guild_id": "g1",
+              "id": "{{id}}", "name": "Geral", "guild_id": "g1",
               "voice_states": [
                 { "nick": null, "mute": {{(_friendMuted ? "true" : "false")}}, "volume": {{_friendVolume}},
                   "voice_state": { "self_mute": false, "self_deaf": false },
-                  "user": { "id": "u2", "username": "amigo", "global_name": "Amigo" } },
+                  "user": { "id": "u2", "username": "amigo", "global_name": "Amigo", "avatar": null } },
                 { "mute": false, "volume": 100, "voice_state": { "self_mute": true },
                   "user": { "id": "u1", "username": "tester" } }
               ]
             }
-            """);
+            """)!;
 
     public Task InitializeAsync()
     {
@@ -57,9 +59,13 @@ public sealed class ChannelAudioWidgetTests : IAsyncLifetime
                     return Voice();
                 case "GET_SELECTED_VOICE_CHANNEL":
                     return SelectedChannel();
+                case "GET_CHANNEL":
+                    return Channel((string)args["channel_id"]!);
                 case "SELECT_VOICE_CHANNEL":
                     _channelId = (string?)args["channel_id"];
                     return SelectedChannel();
+                case "SELECT_TEXT_CHANNEL" when (string?)args["channel_id"] == "bad":
+                    throw new FakeError(4005, "Invalid channel");
                 case "SELECT_TEXT_CHANNEL":
                     _textChannelId = (string?)args["channel_id"];
                     return new JsonObject();
@@ -108,22 +114,56 @@ public sealed class ChannelAudioWidgetTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task Voice_Channel_entra_mostra_quantos_e_sai_no_segundo_toque()
+    public async Task Voice_Channel_mostra_os_avatares_antes_de_entrar_e_fica_verde_dentro()
     {
         await using var widget = await CreateAsync<ChannelInstance>(new VoiceChannelWidget());
         Assert.Equal("Escolha o canal", widget.CurrentVisual().Detail);
         await widget.SaveOptionsAsync(new ChannelOptions { GuildId = "g1", GuildName = "Servidor", ChannelId = "c1", ChannelName = "Geral" });
 
-        await Tap(widget);
+        // Fora da call: o canal é acompanhado (GET_CHANNEL + VOICE_STATE_* do c1) e mostra quem está lá.
+        await FakeDiscord.WaitUntilAsync(() => widget.CurrentVisual().Badge == 2);
+        Assert.Equal(ButtonRenderer.DiscordBlurple, widget.CurrentVisual().Accent);
+        Assert.Equal(["Amigo", "tester"], widget.CurrentVisual().Faces!.Select(f => f.Name));
+        Assert.EndsWith("/embed/avatars/" + ((2UL >> 22) % 6) + ".png", widget.CurrentVisual().Faces![0].Url);
 
+        await Tap(widget);
         Assert.Equal("c1", _channelId);
-        await FakeDiscord.WaitUntilAsync(() => _session.VoiceChannel?.Id == "c1");
-        Assert.Equal("2 pessoas na call", widget.CurrentVisual().Detail);
-        Assert.NotNull(widget.CurrentVisual().Accent);
+        await FakeDiscord.WaitUntilAsync(() => widget.CurrentVisual().Accent == ButtonRenderer.Success);
 
         await Tap(widget);
         Assert.Null(_channelId);
         await FakeDiscord.WaitUntilAsync(() => _session.VoiceChannel is null);
+    }
+
+    [Fact]
+    public async Task Quem_esta_falando_ganha_o_anel()
+    {
+        await using var widget = await CreateAsync<ChannelInstance>(new VoiceChannelWidget());
+        await widget.SaveOptionsAsync(new ChannelOptions { GuildId = "g1", ChannelId = "c1", ChannelName = "Geral" });
+        await FakeDiscord.WaitUntilAsync(() => widget.CurrentVisual().Badge == 2);
+        await FakeDiscord.WaitUntilAsync(() => _discord.Commands.Any(c =>
+            (string?)c["cmd"] == "SUBSCRIBE" && (string?)c["evt"] == "SPEAKING_START" && (string?)c["args"]!["channel_id"] == "c1"));
+
+        await _discord.SendEventAsync("SPEAKING_START", new JsonObject { ["user_id"] = "u2", ["channel_id"] = "c1" });
+        await FakeDiscord.WaitUntilAsync(() => widget.CurrentVisual().Faces![0].Speaking);
+
+        await _discord.SendEventAsync("SPEAKING_STOP", new JsonObject { ["user_id"] = "u2", ["channel_id"] = "c1" });
+        await FakeDiscord.WaitUntilAsync(() => !widget.CurrentVisual().Faces![0].Speaking);
+    }
+
+    [Fact]
+    public async Task Tirar_o_widget_para_de_acompanhar_o_canal()
+    {
+        var widget = await CreateAsync<ChannelInstance>(new VoiceChannelWidget());
+        await widget.SaveOptionsAsync(new ChannelOptions { GuildId = "g1", ChannelId = "c1", ChannelName = "Geral" });
+        await FakeDiscord.WaitUntilAsync(() => _session.GetChannel("c1") is not null);
+        await using var other = await CreateAsync<MuteInstance>(new MuteWidget());
+
+        await widget.DisposeAsync();
+
+        await FakeDiscord.WaitUntilAsync(() => _discord.Commands.Any(c =>
+            (string?)c["cmd"] == "UNSUBSCRIBE" && (string?)c["evt"] == "VOICE_STATE_UPDATE" && (string?)c["args"]!["channel_id"] == "c1"));
+        await FakeDiscord.WaitUntilAsync(() => _session.GetChannel("c1") is null);
     }
 
     [Fact]
@@ -146,6 +186,21 @@ public sealed class ChannelAudioWidgetTests : IAsyncLifetime
 
         Assert.Equal("t1", _textChannelId);
         Assert.Equal("#chat", widget.CurrentVisual().Label);
+        // Retorno do toque só depois que o Discord confirmou.
+        Assert.Equal(ButtonRenderer.Success, widget.CurrentVisual().Accent);
+        Assert.NotNull(widget.CurrentVisual().Level);
+    }
+
+    [Fact]
+    public async Task Comando_recusado_pelo_Discord_fica_vermelho_com_Falhou()
+    {
+        await using var widget = await CreateAsync<ChannelInstance>(new TextChannelWidget());
+        await widget.SaveOptionsAsync(new ChannelOptions { GuildId = "g1", ChannelId = "bad", ChannelName = "secreto" });
+
+        await Tap(widget);
+
+        Assert.Equal(ButtonRenderer.Danger, widget.CurrentVisual().Accent);
+        Assert.Equal("Falhou", widget.CurrentVisual().Detail);
     }
 
     [Fact]
@@ -170,17 +225,38 @@ public sealed class ChannelAudioWidgetTests : IAsyncLifetime
         await Tap(widget, x: 10);
         Assert.Equal(90, _outputVolume);
 
+        // Sem "até 200%", a saída para em 100%.
         await Tap(widget, x: WidgetSize.Wide.PixelSize.Width - 10);
+        await Tap(widget, x: WidgetSize.Wide.PixelSize.Width - 10);
+        Assert.Equal(100, _outputVolume);
+
+        await widget.SaveOptionsAsync(widget.Options with { AllowBoost = true });
         await Tap(widget, x: WidgetSize.Wide.PixelSize.Width - 10);
         Assert.Equal(110, _outputVolume);
         Assert.Equal("110%", widget.CurrentVisual().Label);
+        Assert.Equal(AdjustHints.Horizontal, widget.CurrentVisual().Hints);
+    }
+
+    [Fact]
+    public async Task Volume_no_1x1_esquerda_abaixa_e_direita_aumenta()
+    {
+        _outputVolume = 50;
+        await using var widget = await CreateAsync<VolumeControlInstance>(new VolumeControlWidget());
+        await widget.SaveOptionsAsync(new VolumeOptions { Side = AudioSide.Output, Step = 10 });
+
+        await widget.OnTouchAsync(new TouchEvent(TouchKind.Tap, WidgetSize.Small.PixelSize.Width - 10, 60, TimeSpan.Zero), CancellationToken.None);
+        Assert.Equal(60, _outputVolume);
+
+        await widget.OnTouchAsync(new TouchEvent(TouchKind.Tap, 10, 60, TimeSpan.Zero), CancellationToken.None);
+        Assert.Equal(50, _outputVolume);
+        Assert.Equal(AdjustHints.Horizontal, widget.CurrentVisual().Hints);
     }
 
     [Fact]
     public async Task Volume_definir_usa_o_valor_e_respeita_o_limite()
     {
         await using var widget = await CreateAsync<VolumeControlInstance>(new VolumeControlWidget());
-        await widget.SaveOptionsAsync(new VolumeOptions { Side = AudioSide.Output, Action = VolumeAction.Set, Value = 250 });
+        await widget.SaveOptionsAsync(new VolumeOptions { Side = AudioSide.Output, Action = VolumeAction.Set, Value = 250, AllowBoost = true });
 
         await Tap(widget);
 
@@ -193,10 +269,11 @@ public sealed class ChannelAudioWidgetTests : IAsyncLifetime
         _channelId = "c1";
         await using var widget = await CreateAsync<UserVolumeInstance>(new UserVolumeWidget());
         await FakeDiscord.WaitUntilAsync(() => _session.VoiceChannel is not null);
-        await widget.SaveOptionsAsync(new UserVolumeOptions { UserId = "u2", UserName = "Amigo", Step = -20 });
+        await widget.SaveOptionsAsync(new UserVolumeOptions { UserId = "u2", UserName = "Amigo", Step = 20 });
         Assert.Equal("Amigo", widget.CurrentVisual().Label);
 
-        await Tap(widget);
+        // Lado esquerdo abaixa.
+        await widget.OnTouchAsync(new TouchEvent(TouchKind.Tap, 10, 60, TimeSpan.Zero), CancellationToken.None);
         Assert.Equal(80, _friendVolume);
         await FakeDiscord.WaitUntilAsync(() => widget.CurrentVisual().Detail == "80%");
 

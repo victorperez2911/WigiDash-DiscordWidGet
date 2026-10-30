@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using OpenWigi.Sdk;
+using WigiDash.DiscordWidget.Discord;
 using WigiDash.DiscordWidget.Rendering;
 using WigiDash.DiscordWidget.Settings;
 using WigiDash.DiscordWidget.Widgets;
@@ -53,27 +54,98 @@ public sealed class ChannelInstance(IWidgetContext context, bool voice) : Discor
 
     public override Type? OptionsComponent => typeof(ChannelOptionsPanel);
 
+    private static readonly TimeSpan JoinPulse = TimeSpan.FromSeconds(4);
+    private static readonly TimeSpan PulseFrame = TimeSpan.FromMilliseconds(400);
+    private IDisposable? _watch;
+    private string? _watchedId;
+    private int _lastCount = -1;
+    private DateTimeOffset _pulseUntil;
+
     private bool IsInChannel => IsVoice && Options.ChannelId is { } id && Session.VoiceChannel?.Id == id;
+
+    protected internal override async ValueTask LoadSettingsAsync(CancellationToken cancellationToken)
+    {
+        await base.LoadSettingsAsync(cancellationToken).ConfigureAwait(false);
+        UpdateWatch();
+    }
+
+    public override async Task SaveOptionsAsync(ChannelOptions options)
+    {
+        await base.SaveOptionsAsync(options).ConfigureAwait(false);
+        UpdateWatch();
+    }
+
+    /// <summary>Acompanha quem está no canal escolhido, para mostrar os avatares mesmo antes de entrar.</summary>
+    private void UpdateWatch()
+    {
+        var id = IsVoice ? Options.ChannelId : null;
+        if (id == _watchedId)
+            return;
+        _watch?.Dispose();
+        _watch = id is null ? null : Session.WatchChannel(id);
+        _watchedId = id;
+    }
+
+    protected override void OnDisposing() => _watch?.Dispose();
 
     protected override ButtonVisual GetVisual()
     {
-        if (Options.ChannelId is null)
+        if (Options.ChannelId is not { } channelId)
             return new ButtonVisual(Glyph, Label) { Detail = "Escolha o canal", Dimmed = true };
 
-        var name = IsVoice ? Options.ChannelName ?? "?" : "#" + Options.ChannelName;
         if (!IsVoice)
-            return new ButtonVisual(Glyph, name) { Detail = Options.GuildName };
+            return new ButtonVisual(Glyph, "#" + Options.ChannelName) { Detail = Options.GuildName };
 
-        if (IsInChannel)
+        // Mesmo padrão das imagens do plugin da Elgato: fundo azul do Discord fora da call e verde dentro,
+        // avatares de quem está no canal, contador no canto e anel de quem está falando. Vazio, o logo do servidor.
+        var name = Options.ChannelName ?? "?";
+        var info = Session.GetChannel(channelId);
+        var users = info?.Users ?? [];
+        var joined = IsInChannel;
+        WatchArrivals(info is null ? -1 : users.Count, joined);
+        var accent = joined ? ButtonRenderer.Success : ButtonRenderer.DiscordBlurple;
+        if (users.Count == 0)
+            return new ButtonVisual(Glyphs.Phone, name) { Accent = accent, Detail = "Canal vazio", ImageUrl = GuildIconUrl(Options.GuildId) };
+
+        // Alguém entrou e você não está: pisca mais claro por uns segundos para chamar a atenção.
+        var now = Context.Host.Time.GetUtcNow();
+        if (!joined && now < _pulseUntil && (now - (_pulseUntil - JoinPulse)) / PulseFrame % 2 < 1)
+            accent = ButtonRenderer.Lighter(ButtonRenderer.DiscordBlurple);
+        return new ButtonVisual(Glyphs.Phone, name)
         {
-            var count = Session.VoiceChannel!.Users.Count;
-            return new ButtonVisual(Glyphs.Phone, name)
-            {
-                Accent = ButtonRenderer.Success,
-                Detail = count == 1 ? "1 pessoa na call" : $"{count} pessoas na call",
-            };
+            Accent = accent,
+            Faces = users.Select(u => new AvatarFace(u.AvatarUrl, u.Name, Session.IsSpeaking(u.Id))).ToList(),
+            Badge = users.Count,
+            Detail = joined ? null : "Toque para entrar",
+        };
+    }
+
+    /// <summary>Quando a contagem sobe com você fora do canal, liga o pulso (a primeira leitura não conta).</summary>
+    private void WatchArrivals(int count, bool joined)
+    {
+        if (count < 0)
+            return;
+        if (_lastCount >= 0 && count > _lastCount && !joined)
+        {
+            _pulseUntil = Context.Host.Time.GetUtcNow() + JoinPulse;
+            _ = PulseAsync();
         }
-        return new ButtonVisual(Glyphs.Phone, name) { Detail = Options.GuildName };
+        _lastCount = count;
+    }
+
+    private async Task PulseAsync()
+    {
+        try
+        {
+            while (Context.Host.Time.GetUtcNow() < _pulseUntil)
+            {
+                await Task.Delay(PulseFrame, Context.Host.Time, Context.Stopping).ConfigureAwait(false);
+                Refresh();
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
     }
 
     protected override async Task OnReadyTouchAsync(TouchEvent touch, CancellationToken cancellationToken)
@@ -82,8 +154,8 @@ public sealed class ChannelInstance(IWidgetContext context, bool voice) : Discor
             return;
         if (!IsVoice)
         {
-            await Session.SendAsync("SELECT_TEXT_CHANNEL", new JsonObject { ["channel_id"] = channelId }, cancellationToken)
-                .ConfigureAwait(false);
+            await ConfirmAsync(() => Session.SendAsync("SELECT_TEXT_CHANNEL", new JsonObject { ["channel_id"] = channelId },
+                cancellationToken)).ConfigureAwait(false);
             return;
         }
         await Session.SelectVoiceChannelAsync(IsInChannel ? null : channelId, cancellationToken).ConfigureAwait(false);

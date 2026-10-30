@@ -16,7 +16,7 @@ public sealed class PushToTalkWidget : DiscordWidgetBase
         "Discord: Push to Talk",
         "Enquanto o dedo está no widget o microfone fica aberto; ao soltar, muta. Use com o microfone mutado.");
 
-    protected override ButtonVisual Preview => new(Glyphs.Microphone, "Push to Talk");
+    protected override ButtonVisual Preview => new(Glyphs.Microphone, "Push to Talk") { GlyphBadge = Glyphs.Touch };
 
     protected override DiscordButtonInstance CreateInstance(IWidgetContext context) => new PushToInstance(context, talk: true);
 }
@@ -29,7 +29,7 @@ public sealed class PushToMuteWidget : DiscordWidgetBase
         "Discord: Push to Mute",
         "Enquanto o dedo está no widget o microfone fica mutado; ao soltar, volta como estava.");
 
-    protected override ButtonVisual Preview => new(Glyphs.MicrophoneOff, "Push to Mute");
+    protected override ButtonVisual Preview => new(Glyphs.MicrophoneOff, "Push to Mute") { GlyphBadge = Glyphs.Touch };
 
     protected override DiscordButtonInstance CreateInstance(IWidgetContext context) => new PushToInstance(context, talk: false);
 }
@@ -50,11 +50,12 @@ public sealed class PushToInstance(IWidgetContext context, bool talk) : DiscordB
     {
         if (_held)
             return talk
-                ? new ButtonVisual(Glyphs.Microphone, "Falando") { Accent = ButtonRenderer.Success }
-                : new ButtonVisual(Glyphs.MicrophoneOff, "Mutado") { Accent = ButtonRenderer.Danger };
+                ? new ButtonVisual(Glyphs.Microphone, "Falando") { Accent = ButtonRenderer.Success, GlyphBadge = Glyphs.Touch }
+                : new ButtonVisual(Glyphs.MicrophoneOff, "Mutado") { Accent = ButtonRenderer.Danger, GlyphBadge = Glyphs.Touch };
         var muted = Session.Voice?.Mute ?? false;
         return new ButtonVisual(Glyph, talk ? "Segure para falar" : "Segure para mutar")
         {
+            GlyphBadge = Glyphs.Touch,
             Detail = muted ? "Microfone mutado" : "Microfone ligado",
         };
     }

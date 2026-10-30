@@ -20,6 +20,7 @@ public sealed record SoundboardOptions
     public string? SoundName { get; init; }
     public string? GuildId { get; init; }
     public string? Emoji { get; init; }
+    public string? EmojiId { get; init; }
 }
 
 /// <summary>Toca um som do soundboard na call (PLAY_SOUNDBOARD_SOUND).</summary>
@@ -40,25 +41,57 @@ public sealed class SoundboardInstance(IWidgetContext context) : DiscordOptionsI
     protected override string Glyph => Glyphs.Music;
     protected override string Label => "Soundboard";
 
+    /// <summary>Duração usada quando não deu para ler a do arquivo.</summary>
+    private static readonly TimeSpan FallbackDuration = TimeSpan.FromSeconds(2);
+
+    protected internal override async ValueTask LoadSettingsAsync(CancellationToken cancellationToken)
+    {
+        await base.LoadSettingsAsync(cancellationToken).ConfigureAwait(false);
+        PrefetchDuration();
+    }
+
+    public override async Task SaveOptionsAsync(SoundboardOptions options)
+    {
+        await base.SaveOptionsAsync(options).ConfigureAwait(false);
+        PrefetchDuration();
+    }
+
+    /// <summary>Baixa a duração antes do primeiro toque, para a barra já começar certa.</summary>
+    private void PrefetchDuration()
+    {
+        if (Options.SoundId is { } id)
+            _ = SoundDuration.GetAsync(id);
+    }
+
     public override Type? OptionsComponent => typeof(SoundboardOptionsPanel);
 
     protected override ButtonVisual GetVisual()
     {
         if (Options.SoundId is null)
             return new ButtonVisual(Glyph, Label) { Detail = "Escolha o som", Dimmed = true };
-        var name = string.IsNullOrEmpty(Options.Emoji) ? Options.SoundName : $"{Options.Emoji} {Options.SoundName}";
+        var image = SoundboardSound.EmojiUrl(Options.Emoji, Options.EmojiId);
+        var name = Options.SoundName ?? Label;
+        // Ensurdecido, o Discord não toca o soundboard: o botão fica apagado.
+        if (Session.Voice is { Deaf: true })
+            return new ButtonVisual(Glyph, name) { ImageUrl = image, Detail = "Ensurdecido", Dimmed = true };
         return Session.VoiceChannel is null
-            ? new ButtonVisual(Glyph, name ?? Label) { Detail = "Entre numa call", Dimmed = true }
-            : new ButtonVisual(Glyph, name ?? Label);
+            ? new ButtonVisual(Glyph, name) { ImageUrl = image, Detail = "Entre numa call", Dimmed = true }
+            : new ButtonVisual(Glyph, name) { ImageUrl = image };
     }
 
     protected override async Task OnReadyTouchAsync(TouchEvent touch, CancellationToken cancellationToken)
     {
-        if (touch.Kind != TouchKind.Tap || Options.SoundId is not { } id || Session.VoiceChannel is null)
+        if (touch.Kind != TouchKind.Tap || Options.SoundId is not { } id || Session.VoiceChannel is null || Session.Voice is { Deaf: true })
             return;
         await Session.PlaySoundboardSoundAsync(new SoundboardSound(id, Options.SoundName ?? id, Options.GuildId, Options.Emoji),
             cancellationToken).ConfigureAwait(false);
+        // Tocando: verde, com a barra esvaziando pela duração do som.
+        ShowFeedback(true, await SoundDuration.GetAsync(id, cancellationToken).ConfigureAwait(false) ?? FallbackDuration);
     }
+
+    /// <summary>Ex.: "Invalid Sound" para som de outro servidor sem Nitro (visto no teste de 30/10).</summary>
+    protected override string FailureText(Exception error) =>
+        error is DiscordRpcException && !SoundboardSound.IsDefaultGuild(Options.GuildId) ? "Som de outro servidor" : "Não tocou";
 }
 
 public enum NotificationPress
@@ -112,7 +145,7 @@ public sealed class NotificationsInstance(IWidgetContext context) : DiscordOptio
         var position = _index is { } i ? $"{Math.Clamp(i, 0, list.Count - 1) + 1}/{list.Count}" : $"{list.Count}";
         return new ButtonVisual(Glyph, $"{position}  {shown.Title}")
         {
-            Accent = ButtonRenderer.DiscordBlurple,
+            Accent = ButtonRenderer.Success,
             Detail = shown.Body,
         };
     }
@@ -125,12 +158,13 @@ public sealed class NotificationsInstance(IWidgetContext context) : DiscordOptio
         switch (Options.OnPress)
         {
             case NotificationPress.Open when Shown(list)?.ChannelId is { } channelId:
-                await Session.SendAsync("SELECT_TEXT_CHANNEL", new JsonObject { ["channel_id"] = channelId }, cancellationToken)
-                    .ConfigureAwait(false);
+                await ConfirmAsync(() => Session.SendAsync("SELECT_TEXT_CHANNEL", new JsonObject { ["channel_id"] = channelId },
+                    cancellationToken)).ConfigureAwait(false);
                 break;
             case NotificationPress.Clear:
                 _index = null;
                 Session.ClearNotifications();
+                ShowFeedback(true);
                 break;
             case NotificationPress.CycleOldest when list.Count > 0:
                 _index = _index is { } i && i + 1 < list.Count ? i + 1 : 0;
@@ -185,13 +219,24 @@ public sealed class ServerStatsInstance : DiscordOptionsInstance<ServerStatsOpti
     {
         if (Options.GuildId is null)
             return new ButtonVisual(Glyph, Label) { Detail = "Escolha o servidor", Dimmed = true };
+        // Logo do servidor no lugar do ícone, para saber de qual servidor são os números.
+        var icon = GuildIconUrl(Options.GuildId);
         if (_counts is not { } counts)
-            return new ButtonVisual(Glyph, Options.GuildName ?? Label) { Detail = "Carregando...", Dimmed = true };
-        return new ButtonVisual(Glyph, $"{counts.Online:N0} online") { Detail = $"{counts.Members:N0} membros · {counts.Name}" };
+            return new ButtonVisual(Glyph, Options.GuildName ?? Label) { ImageUrl = icon, Detail = "Carregando...", Dimmed = true };
+        return new ButtonVisual(Glyph, $"{counts.Online:N0} online")
+        {
+            ImageUrl = icon,
+            Detail = $"{counts.Members:N0} membros · {counts.Name}",
+        };
     }
 
-    protected override Task OnReadyTouchAsync(TouchEvent touch, CancellationToken cancellationToken) =>
-        touch.Kind == TouchKind.Tap ? RefreshCountsAsync(cancellationToken) : Task.CompletedTask;
+    protected override async Task OnReadyTouchAsync(TouchEvent touch, CancellationToken cancellationToken)
+    {
+        if (touch.Kind != TouchKind.Tap || Options.GuildId is not { } guildId)
+            return;
+        _counts = await Session.GetGuildCountsAsync(guildId, cancellationToken).ConfigureAwait(false);
+        ShowFeedback(true);
+    }
 
     public override async Task SaveOptionsAsync(ServerStatsOptions options)
     {
@@ -290,7 +335,7 @@ public sealed class MediaToggleInstance(IWidgetContext context, bool video) : Di
         return active switch
         {
             true => new ButtonVisual(Glyph, video ? "Câmera ligada" : "Transmitindo") { Accent = ButtonRenderer.Success },
-            false => new ButtonVisual(video ? Glyphs.VideoOff : Glyph, video ? "Câmera desligada" : "Sem transmissão"),
+            false => new ButtonVisual(Glyph, video ? "Câmera desligada" : "Sem transmissão") { Slashed = true },
             null => new ButtonVisual(Glyph, Label) { Detail = "Toque para alternar" },
         };
     }

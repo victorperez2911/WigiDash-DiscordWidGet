@@ -1,0 +1,47 @@
+name: Release Widget (OpenWigiDash)
+
+# Branch net10: versões 2.x para o OpenWigiDashManager.
+# O SDK vem do nuget.org (victorperez2911.OpenWigi.Sdk): não precisa de token nem de outro repo.
+on:
+  push:
+    tags:
+      - 'v2*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: windows-latest
+
+    env:
+      WIDGET_NAME: "DiscordWidget"
+      CONFIGURATION: "Release"
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '10.0.x'
+
+    - name: Test
+      run: dotnet test tests/DiscordWidget.Tests -c ${{ env.CONFIGURATION }}
+
+    - name: Publish
+      run: dotnet publish DiscordWidget.csproj -c ${{ env.CONFIGURATION }} -o dist/${{ env.WIDGET_NAME }}
+
+    - name: Zip
+      shell: pwsh
+      run: |
+        $zipName = "OpenWigiDash-DiscordWidget-${{ github.ref_name }}.zip"
+        Get-ChildItem "dist\${{ env.WIDGET_NAME }}" | ForEach-Object { Write-Host "  - $($_.Name)" }
+        Compress-Archive -Path "dist\${{ env.WIDGET_NAME }}" -DestinationPath $zipName
+        echo "ZIP_NAME=$zipName" >> $env:GITHUB_ENV
+
+    - name: Create Release
+      uses: softprops/action-gh-release@v2
+      with:
+        files: ${{ env.ZIP_NAME }}
+        generate_release_notes: true

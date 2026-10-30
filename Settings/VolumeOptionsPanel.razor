@@ -3,10 +3,17 @@
     <MudSelect T="AudioSide" Value="Instance.Options.Side" ValueChanged="v => Save(Instance.Options with { Side = v })"
                Label="Dispositivo" Variant="Variant.Outlined" Style="max-width: 320px">
         <MudSelectItem Value="AudioSide.Input">Entrada (microfone, até 100%)</MudSelectItem>
-        <MudSelectItem Value="AudioSide.Output">Saída (até 200%)</MudSelectItem>
+        <MudSelectItem Value="AudioSide.Output">Saída</MudSelectItem>
     </MudSelect>
+    @if (Instance.Options.Side == AudioSide.Output)
+    {
+        <MudSwitch T="bool" Value="Instance.Options.AllowBoost" ValueChanged="v => Save(Instance.Options with { AllowBoost = v })"
+                   Color="Color.Primary">
+            Permitir passar de 100% (o Discord vai até 200%)
+        </MudSwitch>
+    }
     <VolumeActionFields Action="Instance.Options.Action" Step="Instance.Options.Step" Value="Instance.Options.Value"
-                        Max="@(Instance.Options.Side == AudioSide.Input ? 100 : 200)" AllowMute="false"
+                        Max="@(Instance.Options.Side == AudioSide.Output && Instance.Options.AllowBoost ? 200 : 100)" AllowMute="false"
                         Changed="c => Save(Instance.Options with { Action = c.Action, Step = c.Step, Value = c.Value })" />
 </MudStack>
 

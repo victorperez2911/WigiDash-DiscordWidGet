@@ -26,7 +26,7 @@ public sealed class DeafenInstance(IWidgetContext context) : DiscordButtonInstan
     protected override string Label => "Deafen";
 
     protected override ButtonVisual GetVisual() => Session.Voice is { Deaf: true }
-        ? new ButtonVisual(Glyphs.Headphone, "Ensurdecido") { Accent = ButtonRenderer.Danger }
+        ? new ButtonVisual(Glyphs.Headphone, "Ensurdecido") { Accent = ButtonRenderer.Danger, Slashed = true }
         : new ButtonVisual(Glyphs.Headphone, "Áudio ligado");
 
     protected override async Task OnReadyTouchAsync(TouchEvent touch, CancellationToken cancellationToken)

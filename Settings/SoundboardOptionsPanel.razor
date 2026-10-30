@@ -12,10 +12,12 @@
                  Style="max-height: 260px; overflow-y: auto">
             @foreach (var sound in Filtered)
             {
-                <MudListItem T="string" Value="@sound.Id" Text="@($"{sound.Emoji} {sound.Name}".Trim())" />
+                <MudListItem T="string" Value="@sound.Id" Text="@Describe(sound)" />
             }
         </MudList>
-        <MudText Typo="Typo.caption" Color="Color.Secondary">O som só toca quando você está numa call.</MudText>
+        <MudText Typo="Typo.caption" Color="Color.Secondary">
+            O som só toca quando você está numa call. Som de um servidor só toca em call de outro servidor com Nitro.
+        </MudText>
     }
     @if (_error is not null)
     {
@@ -28,6 +30,7 @@
     public SoundboardInstance Instance { get; set; } = default!;
 
     private IReadOnlyList<SoundboardSound> _sounds = [];
+    private IReadOnlyList<Guild> _guilds = [];
     private string _search = string.Empty;
     private string? _error;
 
@@ -42,11 +45,21 @@
         try
         {
             _sounds = await Instance.Session.GetSoundboardSoundsAsync();
+            _guilds = await Instance.Session.GetGuildsAsync();
         }
         catch (Exception ex)
         {
             _error = ex.Message;
         }
+    }
+
+    private string Describe(SoundboardSound sound)
+    {
+        var text = $"{sound.Emoji} {sound.Name}".Trim();
+        if (sound.IsDefault)
+            return text;
+        var guild = _guilds.FirstOrDefault(g => g.Id == sound.GuildId)?.Name ?? "outro servidor";
+        return $"{text}  ({guild})";
     }
 
     private Task Select(string? id)
@@ -58,6 +71,7 @@
             SoundId = sound.Id,
             SoundName = sound.Name,
             GuildId = sound.GuildId,
+            EmojiId = sound.EmojiId,
             Emoji = sound.Emoji,
         });
     }
