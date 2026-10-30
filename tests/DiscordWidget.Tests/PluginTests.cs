@@ -56,6 +56,10 @@ public sealed class PluginTests
             Path.Combine(output, "estado-volume-1x1.png"));
         Save(ButtonRenderer.Render(WidgetSize.Wide.PixelSize, theme, new ButtonVisual(Glyphs.Volume, "60%") { Level = 0.6, Hints = AdjustHints.Horizontal }),
             Path.Combine(output, "estado-volume-2x1.png"));
+        Save(ButtonRenderer.Render(WidgetSize.Small.PixelSize, theme, new ButtonVisual(Glyphs.Microphone, "Detecção de voz") { GlyphBadge = Glyphs.Volume, Detail = "Modo de voz" }),
+            Path.Combine(output, "estado-modo-voz.png"));
+        Save(ButtonRenderer.Render(WidgetSize.Small.PixelSize, theme, new ButtonVisual(Glyphs.Microphone, "Push to Talk") { Accent = ButtonRenderer.Success, GlyphBadge = Glyphs.Touch, Detail = "Modo de voz" }),
+            Path.Combine(output, "estado-modo-ptt.png"));
     }
 
     internal static void Save(WidgetFrame frame, string path)
