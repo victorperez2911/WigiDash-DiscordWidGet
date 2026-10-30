@@ -1,6 +1,7 @@
 using System.Text.Json.Nodes;
 using OpenWigi.Sdk;
 using WigiDash.DiscordWidget.Discord;
+using WigiDash.DiscordWidget.Rendering;
 using WigiDash.DiscordWidget.Widgets;
 
 namespace DiscordWidget.Tests;
@@ -111,7 +112,7 @@ public sealed class ChannelAudioWidgetTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task Voice_Channel_mostra_os_avatares_antes_de_entrar_e_fica_azul_dentro()
+    public async Task Voice_Channel_mostra_os_avatares_antes_de_entrar_e_fica_verde_dentro()
     {
         await using var widget = await CreateAsync<ChannelInstance>(new VoiceChannelWidget());
         Assert.Equal("Escolha o canal", widget.CurrentVisual().Detail);
@@ -119,13 +120,13 @@ public sealed class ChannelAudioWidgetTests : IAsyncLifetime
 
         // Fora da call: o canal é acompanhado (GET_CHANNEL + VOICE_STATE_* do c1) e mostra quem está lá.
         await FakeDiscord.WaitUntilAsync(() => widget.CurrentVisual().Badge == 2);
-        Assert.Null(widget.CurrentVisual().Accent);
+        Assert.Equal(ButtonRenderer.DiscordBlurple, widget.CurrentVisual().Accent);
         Assert.Equal(["Amigo", "tester"], widget.CurrentVisual().Faces!.Select(f => f.Name));
         Assert.EndsWith("/embed/avatars/" + ((2UL >> 22) % 6) + ".png", widget.CurrentVisual().Faces![0].Url);
 
         await Tap(widget);
         Assert.Equal("c1", _channelId);
-        await FakeDiscord.WaitUntilAsync(() => widget.CurrentVisual().Accent is not null);
+        await FakeDiscord.WaitUntilAsync(() => widget.CurrentVisual().Accent == ButtonRenderer.Success);
 
         await Tap(widget);
         Assert.Null(_channelId);

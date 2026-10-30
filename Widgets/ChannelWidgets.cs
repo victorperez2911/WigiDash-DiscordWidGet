@@ -91,16 +91,16 @@ public sealed class ChannelInstance(IWidgetContext context, bool voice) : Discor
         if (!IsVoice)
             return new ButtonVisual(Glyph, "#" + Options.ChannelName) { Detail = Options.GuildName };
 
-        // Como no plugin da Elgato: avatares de quem está no canal, contador no canto, fundo azul quando você
-        // está nele. Anel verde em quem está falando.
+        // Mesmo padrão das imagens do plugin da Elgato: fundo azul do Discord fora da call e verde dentro,
+        // avatares de quem está no canal, contador no canto e anel verde em quem está falando.
         var name = Options.ChannelName ?? "?";
         var users = Session.GetChannel(channelId)?.Users ?? [];
-        var joined = IsInChannel;
+        var accent = IsInChannel ? ButtonRenderer.Success : ButtonRenderer.DiscordBlurple;
         if (users.Count == 0)
-            return new ButtonVisual(Glyphs.Phone, name) { Detail = "Canal vazio" };
+            return new ButtonVisual(Glyphs.Phone, name) { Accent = accent, Detail = "Canal vazio" };
         return new ButtonVisual(Glyphs.Phone, name)
         {
-            Accent = joined ? ButtonRenderer.DiscordBlurple : null,
+            Accent = accent,
             Faces = users.Select(u => new AvatarFace(u.AvatarUrl, u.Name, Session.IsSpeaking(u.Id))).ToList(),
             Badge = users.Count,
         };
