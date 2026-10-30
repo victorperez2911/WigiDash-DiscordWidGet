@@ -3,7 +3,8 @@ using System.Text.Json;
 namespace WigiDash.DiscordWidget.Discord;
 
 /// <summary>Servidor, como vem em GET_GUILDS.</summary>
-public sealed record Guild(string Id, string Name);
+/// <summary>Servidor, como vem em GET_GUILDS. <see cref="IconUrl"/> em PNG (o GDI+ não lê WebP).</summary>
+public sealed record Guild(string Id, string Name, string? IconUrl = null);
 
 /// <summary>Tipos de canal do Discord que o plugin usa.</summary>
 public enum ChannelKind
@@ -87,10 +88,23 @@ public sealed record VoiceChannelInfo(string Id, string Name, string? GuildId, I
 
 internal static class GuildParsing
 {
+    /// <summary>O Discord manda o ícone em .webp; o CDN entrega o mesmo em .png, que o GDI+ desenha.</summary>
+    internal static string? IconPng(string? url)
+    {
+        if (string.IsNullOrEmpty(url))
+            return null;
+        var query = url.IndexOf('?');
+        var path = query >= 0 ? url[..query] : url;
+        if (path.EndsWith(".webp", StringComparison.OrdinalIgnoreCase))
+            path = path[..^5] + ".png";
+        return path + "?size=128";
+    }
+
     public static IReadOnlyList<Guild> ParseGuilds(JsonElement data) =>
         data.TryGetProperty("guilds", out var guilds) && guilds.ValueKind == JsonValueKind.Array
             ? guilds.EnumerateArray()
-                .Select(g => new Guild(g.GetProperty("id").GetString()!, g.GetProperty("name").GetString() ?? string.Empty))
+                .Select(g => new Guild(g.GetProperty("id").GetString()!, g.GetProperty("name").GetString() ?? string.Empty,
+                    IconPng(g.TryGetProperty("icon_url", out var icon) && icon.ValueKind == JsonValueKind.String ? icon.GetString() : null)))
                 .ToList()
             : [];
 

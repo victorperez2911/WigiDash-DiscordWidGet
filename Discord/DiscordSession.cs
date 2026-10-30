@@ -204,8 +204,17 @@ public sealed class DiscordSession
         return rpc.SubscribeAsync(evt, args, cancellationToken);
     }
 
-    public async Task<IReadOnlyList<Guild>> GetGuildsAsync(CancellationToken cancellationToken = default) =>
-        GuildParsing.ParseGuilds(await SendAsync("GET_GUILDS", cancellationToken: cancellationToken).ConfigureAwait(false));
+    public async Task<IReadOnlyList<Guild>> GetGuildsAsync(CancellationToken cancellationToken = default)
+    {
+        var guilds = GuildParsing.ParseGuilds(await SendAsync("GET_GUILDS", cancellationToken: cancellationToken).ConfigureAwait(false));
+        _guilds = guilds;
+        return guilds;
+    }
+
+    /// <summary>Servidor já lido nesta conexão (sem ir ao Discord); <c>null</c> se a lista ainda não foi pedida.</summary>
+    public Guild? FindGuild(string guildId) => _guilds?.FirstOrDefault(g => g.Id == guildId);
+
+    private IReadOnlyList<Guild>? _guilds;
 
     public async Task<IReadOnlyList<Channel>> GetChannelsAsync(string guildId, CancellationToken cancellationToken = default) =>
         GuildParsing.ParseChannels(await SendAsync("GET_CHANNELS", new JsonObject { ["guild_id"] = guildId }, cancellationToken)

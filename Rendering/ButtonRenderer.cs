@@ -265,6 +265,9 @@ public static class ButtonRenderer
     /// <summary>Quantas células de largura o quadro ocupa (para decidir quantos avatares cabem).</summary>
     private static int Columns(this PixelSize size) => size.Width > WidgetGrid.CellWidth ? 2 : 1;
 
+    /// <summary>A cor um pouco mais clara (pulso de atenção).</summary>
+    public static Color Lighter(Color color) => Blend(color, Color.White, 0.3);
+
     private static Color ToColor(WidgetColor c) => Color.FromArgb(c.R, c.G, c.B);
 
     private static Color Blend(Color a, Color b, double t) => Color.FromArgb(
