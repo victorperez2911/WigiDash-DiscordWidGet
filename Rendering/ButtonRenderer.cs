@@ -24,7 +24,16 @@ public sealed record ButtonVisual(string Glyph, string Label)
 
     /// <summary>Barra de nível no rodapé (volume), de 0 a 1. <c>null</c> = sem barra.</summary>
     public double? Level { get; init; }
+
+    /// <summary>Avatares no lugar do ícone (quem está no canal), sobrepostos da esquerda para a direita.</summary>
+    public IReadOnlyList<AvatarFace>? Faces { get; init; }
+
+    /// <summary>Contador no canto superior direito (ex.: pessoas no canal).</summary>
+    public int? Badge { get; init; }
 }
+
+/// <summary>Um avatar: imagem do CDN (ou a inicial do nome enquanto não chega) e o anel de quem está falando.</summary>
+public sealed record AvatarFace(string? Url, string Name, bool Speaking);
 
 /// <summary>Desenha um <see cref="ButtonVisual"/> no tamanho do widget, com as cores e fontes do tema.</summary>
 public static class ButtonRenderer
@@ -61,9 +70,17 @@ public static class ButtonRenderer
             var textBlock = labelHeight + (hasDetail ? labelHeight * 4 / 5 : 0) + 8;
             var iconArea = new RectangleF(0, 6, size.Width, size.Height - textBlock - 6);
 
-            using (var iconFont = new Font(IconFont, Math.Min(iconArea.Height * 0.62f, size.Width * 0.4f), GraphicsUnit.Pixel))
-            using (var brush = new SolidBrush(foreground))
+            if (visual.Faces is { Count: > 0 } faces)
+                DrawFaces(g, iconArea, faces, background, size.Columns() > 1 ? 5 : 3);
+            else
+            {
+                using var iconFont = new Font(IconFont, Math.Min(iconArea.Height * 0.62f, size.Width * 0.4f), GraphicsUnit.Pixel);
+                using var brush = new SolidBrush(foreground);
                 g.DrawString(visual.Glyph, iconFont, brush, iconArea, Centered);
+            }
+
+            if (visual.Badge is { } badge)
+                DrawBadge(g, size, theme, badge, background, foreground);
 
             var y = size.Height - textBlock;
             using (var labelFont = new Font(theme.SecondaryFontFamily, labelHeight * 0.8f, GraphicsUnit.Pixel))
@@ -89,6 +106,86 @@ public static class ButtonRenderer
             }
         }
         return ToFrame(bitmap);
+    }
+
+    /// <summary>
+    /// Avatares em círculo, sobrepostos como no plugin da Elgato. Quem está falando ganha anel verde; acima do
+    /// limite, o último círculo vira "+N".
+    /// </summary>
+    private static void DrawFaces(Graphics g, RectangleF area, IReadOnlyList<AvatarFace> faces, Color background, int max)
+    {
+        var shown = faces.Count > max ? faces.Take(max - 1).ToList() : faces.ToList();
+        var extra = faces.Count - shown.Count;
+        var slots = shown.Count + (extra > 0 ? 1 : 0);
+        var d = Math.Min(area.Height * 0.92f, area.Width * 0.5f);
+        var step = slots > 1 ? Math.Min(d * 0.7f, (area.Width - 12 - d) / (slots - 1)) : 0;
+        var total = d + step * (slots - 1);
+        var x = area.X + (area.Width - total) / 2;
+        var y = area.Y + (area.Height - d) / 2;
+        var ring = Math.Max(3f, d / 16);
+
+        for (var i = 0; i < shown.Count; i++)
+        {
+            var rect = new RectangleF(x + step * i, y, d, d);
+            using (var border = new SolidBrush(shown[i].Speaking ? Success : background))
+                g.FillEllipse(border, RectangleF.Inflate(rect, ring, ring));
+            DrawAvatar(g, rect, shown[i]);
+        }
+
+        if (extra > 0)
+        {
+            var rect = new RectangleF(x + step * shown.Count, y, d, d);
+            using (var border = new SolidBrush(background))
+                g.FillEllipse(border, RectangleF.Inflate(rect, ring, ring));
+            using (var fill = new SolidBrush(Color.FromArgb(78, 80, 88)))
+                g.FillEllipse(fill, rect);
+            using var font = new Font("Segoe UI Semibold", d * 0.32f, GraphicsUnit.Pixel);
+            g.DrawString($"+{extra}", font, Brushes.White, rect, Centered);
+        }
+    }
+
+    private static void DrawAvatar(Graphics g, RectangleF rect, AvatarFace face)
+    {
+        using var clip = new GraphicsPath();
+        clip.AddEllipse(rect);
+        var image = AvatarCache.Get(face.Url);
+        if (image is not null)
+        {
+            var state = g.Save();
+            g.SetClip(clip);
+            g.InterpolationMode = InterpolationMode.HighQualityBicubic;
+            lock (image)
+                g.DrawImage(image, rect);
+            g.Restore(state);
+            return;
+        }
+        // Enquanto o avatar não chega: a inicial sobre a cor da pessoa (estável pelo nome).
+        var hue = (uint)face.Name.GetHashCode() % 6;
+        Color[] palette = [DiscordBlurple, Success, Danger, Color.FromArgb(240, 178, 50), Color.FromArgb(235, 69, 158), Color.FromArgb(87, 158, 230)];
+        using (var fill = new SolidBrush(palette[hue]))
+            g.FillEllipse(fill, rect);
+        using var font = new Font("Segoe UI Semibold", rect.Height * 0.45f, GraphicsUnit.Pixel);
+        var initial = face.Name.Length > 0 ? char.ToUpperInvariant(face.Name[0]).ToString() : "?";
+        g.DrawString(initial, font, Brushes.White, rect, Centered);
+    }
+
+    /// <summary>Pílula com o contador no canto superior direito, como o "2" de pessoas da Elgato.</summary>
+    private static void DrawBadge(Graphics g, PixelSize size, WidgetTheme theme, int count, Color background, Color foreground)
+    {
+        var height = Math.Max(20f, size.Height / 6.5f);
+        using var font = new Font(theme.SecondaryFontFamily, height * 0.62f, GraphicsUnit.Pixel);
+        using var iconFont = new Font(IconFont, height * 0.55f, GraphicsUnit.Pixel);
+        var text = count.ToString();
+        var textWidth = g.MeasureString(text, font).Width;
+        var width = height * 0.9f + textWidth + height * 0.3f;
+        var inset = Math.Max(theme.CornerRadius * 0.6f, 6);
+        var rect = new RectangleF(size.Width - width - inset, inset, width, height);
+        using (var path = RoundedRect(Rectangle.Round(rect), (int)(height / 2)))
+        using (var fill = new SolidBrush(Color.FromArgb(200, Blend(background, Color.Black, 0.55))))
+            g.FillPath(fill, path);
+        using var brush = new SolidBrush(foreground);
+        g.DrawString("\uE77B", iconFont, brush, new RectangleF(rect.X + height * 0.15f, rect.Y, height * 0.75f, height), Centered);
+        g.DrawString(text, font, brush, new RectangleF(rect.X + height * 0.8f, rect.Y, textWidth + height * 0.2f, height), Centered);
     }
 
     private static readonly StringFormat Centered = new()
@@ -131,6 +228,9 @@ public static class ButtonRenderer
         path.CloseFigure();
         return path;
     }
+
+    /// <summary>Quantas células de largura o quadro ocupa (para decidir quantos avatares cabem).</summary>
+    private static int Columns(this PixelSize size) => size.Width > WidgetGrid.CellWidth ? 2 : 1;
 
     private static Color ToColor(WidgetColor c) => Color.FromArgb(c.R, c.G, c.B);
 

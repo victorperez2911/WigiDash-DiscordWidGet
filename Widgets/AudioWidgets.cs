@@ -216,7 +216,12 @@ public sealed class UserVolumeInstance(IWidgetContext context) : DiscordOptionsI
             return new ButtonVisual(Glyph, Options.UserName ?? Label) { Detail = "Fora da call", Dimmed = true };
         if (user.LocallyMuted)
             return new ButtonVisual(Glyphs.Mute, user.Name) { Accent = ButtonRenderer.Danger, Detail = "Mutado para você" };
-        return new ButtonVisual(Glyph, user.Name) { Detail = $"{Math.Round(user.Volume)}%", Level = user.Volume / 200 };
+        return new ButtonVisual(Glyph, user.Name)
+        {
+            Detail = $"{Math.Round(user.Volume)}%",
+            Level = user.Volume / 200,
+            Faces = [new AvatarFace(user.AvatarUrl, user.Name, Session.IsSpeaking(user.Id))],
+        };
     }
 
     protected override async Task OnReadyTouchAsync(TouchEvent touch, CancellationToken cancellationToken)

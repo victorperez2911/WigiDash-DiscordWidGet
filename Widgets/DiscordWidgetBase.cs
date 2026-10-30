@@ -65,6 +65,7 @@ public abstract class DiscordButtonInstance : IWidgetInstance
     {
         Context = context;
         Session.Changed += OnSessionChanged;
+        AvatarCache.Loaded += OnSessionChanged;
         _lease = Session.Acquire();
     }
 
@@ -162,6 +163,7 @@ public abstract class DiscordButtonInstance : IWidgetInstance
     {
         OnDisposing();
         Session.Changed -= OnSessionChanged;
+        AvatarCache.Loaded -= OnSessionChanged;
         _lease.Dispose();
         GC.SuppressFinalize(this);
         return ValueTask.CompletedTask;

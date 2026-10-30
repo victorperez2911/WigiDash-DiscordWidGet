@@ -22,8 +22,12 @@ public sealed record Channel(string Id, string Name, ChannelKind Kind)
     public bool IsText => Kind is ChannelKind.Text or ChannelKind.Announcement;
 }
 
-/// <summary>Alguém na call, com o volume e o mute que <b>você</b> deu a essa pessoa (SET_USER_VOICE_SETTINGS).</summary>
-public sealed record VoiceUser(string Id, string Name, double Volume, bool LocallyMuted, bool SelfMuted, bool SelfDeafened);
+/// <summary>
+/// Alguém na call, com o volume e o mute que <b>você</b> deu a essa pessoa (SET_USER_VOICE_SETTINGS) e o avatar
+/// no CDN do Discord.
+/// </summary>
+public sealed record VoiceUser(string Id, string Name, double Volume, bool LocallyMuted, bool SelfMuted, bool SelfDeafened,
+    string? AvatarUrl = null);
 
 /// <summary>A call em que você está (GET_SELECTED_VOICE_CHANNEL).</summary>
 public sealed record VoiceChannelInfo(string Id, string Name, string? GuildId, IReadOnlyList<VoiceUser> Users)
@@ -57,7 +61,19 @@ public sealed record VoiceChannelInfo(string Id, string Name, string? GuildId, I
             state.TryGetProperty("volume", out var volume) && volume.ValueKind == JsonValueKind.Number ? volume.GetDouble() : 100,
             Bool(state, "mute"),
             voice.ValueKind == JsonValueKind.Object && (Bool(voice, "self_mute") || Bool(voice, "mute")),
-            voice.ValueKind == JsonValueKind.Object && (Bool(voice, "self_deaf") || Bool(voice, "deaf")));
+            voice.ValueKind == JsonValueKind.Object && (Bool(voice, "self_deaf") || Bool(voice, "deaf")),
+            AvatarUrl(Str(user, "id"), Str(user, "avatar")));
+    }
+
+    /// <summary>Avatar de 64 px; sem avatar próprio, o padrão do Discord ((id >> 22) % 6).</summary>
+    internal static string? AvatarUrl(string? userId, string? avatar)
+    {
+        if (userId is null)
+            return null;
+        if (avatar is not null)
+            return $"https://cdn.discordapp.com/avatars/{userId}/{avatar}.png?size=64";
+        var index = ulong.TryParse(userId, out var id) ? (id >> 22) % 6 : 0;
+        return $"https://cdn.discordapp.com/embed/avatars/{index}.png";
     }
 
     private static string? Str(JsonElement e, string name) =>

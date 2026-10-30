@@ -28,20 +28,21 @@ public sealed class ChannelAudioWidgetTests : IAsyncLifetime
         return json;
     }
 
-    private JsonNode? SelectedChannel() => _channelId is null
-        ? null
-        : JsonNode.Parse($$"""
+    private JsonNode? SelectedChannel() => _channelId is null ? null : Channel(_channelId);
+
+    /// <summary>O canal c1 com o Amigo e você, esteja você nele ou não (GET_CHANNEL).</summary>
+    private JsonNode Channel(string id) => JsonNode.Parse($$"""
             {
-              "id": "{{_channelId}}", "name": "Geral", "guild_id": "g1",
+              "id": "{{id}}", "name": "Geral", "guild_id": "g1",
               "voice_states": [
                 { "nick": null, "mute": {{(_friendMuted ? "true" : "false")}}, "volume": {{_friendVolume}},
                   "voice_state": { "self_mute": false, "self_deaf": false },
-                  "user": { "id": "u2", "username": "amigo", "global_name": "Amigo" } },
+                  "user": { "id": "u2", "username": "amigo", "global_name": "Amigo", "avatar": null } },
                 { "mute": false, "volume": 100, "voice_state": { "self_mute": true },
                   "user": { "id": "u1", "username": "tester" } }
               ]
             }
-            """);
+            """)!;
 
     public Task InitializeAsync()
     {
@@ -57,6 +58,8 @@ public sealed class ChannelAudioWidgetTests : IAsyncLifetime
                     return Voice();
                 case "GET_SELECTED_VOICE_CHANNEL":
                     return SelectedChannel();
+                case "GET_CHANNEL":
+                    return Channel((string)args["channel_id"]!);
                 case "SELECT_VOICE_CHANNEL":
                     _channelId = (string?)args["channel_id"];
                     return SelectedChannel();
@@ -108,22 +111,56 @@ public sealed class ChannelAudioWidgetTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task Voice_Channel_entra_mostra_quantos_e_sai_no_segundo_toque()
+    public async Task Voice_Channel_mostra_os_avatares_antes_de_entrar_e_fica_azul_dentro()
     {
         await using var widget = await CreateAsync<ChannelInstance>(new VoiceChannelWidget());
         Assert.Equal("Escolha o canal", widget.CurrentVisual().Detail);
         await widget.SaveOptionsAsync(new ChannelOptions { GuildId = "g1", GuildName = "Servidor", ChannelId = "c1", ChannelName = "Geral" });
 
-        await Tap(widget);
+        // Fora da call: o canal é acompanhado (GET_CHANNEL + VOICE_STATE_* do c1) e mostra quem está lá.
+        await FakeDiscord.WaitUntilAsync(() => widget.CurrentVisual().Badge == 2);
+        Assert.Null(widget.CurrentVisual().Accent);
+        Assert.Equal(["Amigo", "tester"], widget.CurrentVisual().Faces!.Select(f => f.Name));
+        Assert.EndsWith("/embed/avatars/" + ((2UL >> 22) % 6) + ".png", widget.CurrentVisual().Faces![0].Url);
 
+        await Tap(widget);
         Assert.Equal("c1", _channelId);
-        await FakeDiscord.WaitUntilAsync(() => _session.VoiceChannel?.Id == "c1");
-        Assert.Equal("2 pessoas na call", widget.CurrentVisual().Detail);
-        Assert.NotNull(widget.CurrentVisual().Accent);
+        await FakeDiscord.WaitUntilAsync(() => widget.CurrentVisual().Accent is not null);
 
         await Tap(widget);
         Assert.Null(_channelId);
         await FakeDiscord.WaitUntilAsync(() => _session.VoiceChannel is null);
+    }
+
+    [Fact]
+    public async Task Quem_esta_falando_ganha_o_anel()
+    {
+        await using var widget = await CreateAsync<ChannelInstance>(new VoiceChannelWidget());
+        await widget.SaveOptionsAsync(new ChannelOptions { GuildId = "g1", ChannelId = "c1", ChannelName = "Geral" });
+        await FakeDiscord.WaitUntilAsync(() => widget.CurrentVisual().Badge == 2);
+        await FakeDiscord.WaitUntilAsync(() => _discord.Commands.Any(c =>
+            (string?)c["cmd"] == "SUBSCRIBE" && (string?)c["evt"] == "SPEAKING_START" && (string?)c["args"]!["channel_id"] == "c1"));
+
+        await _discord.SendEventAsync("SPEAKING_START", new JsonObject { ["user_id"] = "u2", ["channel_id"] = "c1" });
+        await FakeDiscord.WaitUntilAsync(() => widget.CurrentVisual().Faces![0].Speaking);
+
+        await _discord.SendEventAsync("SPEAKING_STOP", new JsonObject { ["user_id"] = "u2", ["channel_id"] = "c1" });
+        await FakeDiscord.WaitUntilAsync(() => !widget.CurrentVisual().Faces![0].Speaking);
+    }
+
+    [Fact]
+    public async Task Tirar_o_widget_para_de_acompanhar_o_canal()
+    {
+        var widget = await CreateAsync<ChannelInstance>(new VoiceChannelWidget());
+        await widget.SaveOptionsAsync(new ChannelOptions { GuildId = "g1", ChannelId = "c1", ChannelName = "Geral" });
+        await FakeDiscord.WaitUntilAsync(() => _session.GetChannel("c1") is not null);
+        await using var other = await CreateAsync<MuteInstance>(new MuteWidget());
+
+        await widget.DisposeAsync();
+
+        await FakeDiscord.WaitUntilAsync(() => _discord.Commands.Any(c =>
+            (string?)c["cmd"] == "UNSUBSCRIBE" && (string?)c["evt"] == "VOICE_STATE_UPDATE" && (string?)c["args"]!["channel_id"] == "c1"));
+        await FakeDiscord.WaitUntilAsync(() => _session.GetChannel("c1") is null);
     }
 
     [Fact]
