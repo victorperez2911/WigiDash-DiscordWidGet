@@ -111,7 +111,7 @@ public sealed class SetAudioDeviceInstance(IWidgetContext context) : DiscordOpti
             args["input"] = new JsonObject { ["device_id"] = Options.InputId };
         if (WantsOutput)
             args["output"] = new JsonObject { ["device_id"] = Options.OutputId };
-        await Session.SetVoiceSettingsAsync(args, cancellationToken).ConfigureAwait(false);
+        await ConfirmAsync(() => Session.SetVoiceSettingsAsync(args, cancellationToken)).ConfigureAwait(false);
     }
 }
 

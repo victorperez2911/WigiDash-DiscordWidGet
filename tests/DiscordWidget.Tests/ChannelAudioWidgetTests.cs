@@ -64,6 +64,8 @@ public sealed class ChannelAudioWidgetTests : IAsyncLifetime
                 case "SELECT_VOICE_CHANNEL":
                     _channelId = (string?)args["channel_id"];
                     return SelectedChannel();
+                case "SELECT_TEXT_CHANNEL" when (string?)args["channel_id"] == "bad":
+                    throw new FakeError(4005, "Invalid channel");
                 case "SELECT_TEXT_CHANNEL":
                     _textChannelId = (string?)args["channel_id"];
                     return new JsonObject();
@@ -184,6 +186,21 @@ public sealed class ChannelAudioWidgetTests : IAsyncLifetime
 
         Assert.Equal("t1", _textChannelId);
         Assert.Equal("#chat", widget.CurrentVisual().Label);
+        // Retorno do toque só depois que o Discord confirmou.
+        Assert.Equal(ButtonRenderer.Success, widget.CurrentVisual().Accent);
+        Assert.NotNull(widget.CurrentVisual().Level);
+    }
+
+    [Fact]
+    public async Task Comando_recusado_pelo_Discord_fica_vermelho_com_Falhou()
+    {
+        await using var widget = await CreateAsync<ChannelInstance>(new TextChannelWidget());
+        await widget.SaveOptionsAsync(new ChannelOptions { GuildId = "g1", ChannelId = "bad", ChannelName = "secreto" });
+
+        await Tap(widget);
+
+        Assert.Equal(ButtonRenderer.Danger, widget.CurrentVisual().Accent);
+        Assert.Equal("Falhou", widget.CurrentVisual().Detail);
     }
 
     [Fact]

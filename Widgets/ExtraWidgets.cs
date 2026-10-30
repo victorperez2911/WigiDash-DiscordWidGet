@@ -41,14 +41,8 @@ public sealed class SoundboardInstance(IWidgetContext context) : DiscordOptionsI
     protected override string Glyph => Glyphs.Music;
     protected override string Label => "Soundboard";
 
-    private static readonly TimeSpan ErrorTime = TimeSpan.FromSeconds(3);
     /// <summary>Duração usada quando não deu para ler a do arquivo.</summary>
     private static readonly TimeSpan FallbackDuration = TimeSpan.FromSeconds(2);
-    private static readonly TimeSpan FrameInterval = TimeSpan.FromMilliseconds(100);
-    private string? _error;
-    private DateTimeOffset _playStart;
-    private TimeSpan _playLength;
-    private bool _playing;
 
     protected internal override async ValueTask LoadSettingsAsync(CancellationToken cancellationToken)
     {
@@ -77,15 +71,6 @@ public sealed class SoundboardInstance(IWidgetContext context) : DiscordOptionsI
             return new ButtonVisual(Glyph, Label) { Detail = "Escolha o som", Dimmed = true };
         var image = SoundboardSound.EmojiUrl(Options.Emoji, Options.EmojiId);
         var name = Options.SoundName ?? Label;
-        if (_error is not null)
-            return new ButtonVisual(Glyph, name) { ImageUrl = image, Accent = ButtonRenderer.Danger, Detail = _error };
-        if (_playing)
-        {
-            // Tocando: verde, com a barra esvaziando pela duração do som.
-            var elapsed = Context.Host.Time.GetUtcNow() - _playStart;
-            var remaining = 1 - Math.Clamp(elapsed / _playLength, 0, 1);
-            return new ButtonVisual(Glyph, name) { ImageUrl = image, Accent = ButtonRenderer.Success, Level = remaining };
-        }
         // Ensurdecido, o Discord não toca o soundboard: o botão fica apagado.
         if (Session.Voice is { Deaf: true })
             return new ButtonVisual(Glyph, name) { ImageUrl = image, Detail = "Ensurdecido", Dimmed = true };
@@ -98,55 +83,15 @@ public sealed class SoundboardInstance(IWidgetContext context) : DiscordOptionsI
     {
         if (touch.Kind != TouchKind.Tap || Options.SoundId is not { } id || Session.VoiceChannel is null || Session.Voice is { Deaf: true })
             return;
-        try
-        {
-            await Session.PlaySoundboardSoundAsync(new SoundboardSound(id, Options.SoundName ?? id, Options.GuildId, Options.Emoji),
-                cancellationToken).ConfigureAwait(false);
-            _playLength = await SoundDuration.GetAsync(id, cancellationToken).ConfigureAwait(false) ?? FallbackDuration;
-            _playStart = Context.Host.Time.GetUtcNow();
-            if (!_playing)
-            {
-                _playing = true;
-                _ = AnimateAsync();
-            }
-        }
-        catch (DiscordRpcException ex)
-        {
-            // Ex.: "Invalid Sound" para som de outro servidor sem Nitro (visto no teste de 30/10).
-            Context.Logger.LogInformation("Discord: soundboard recusou {Sound}: {Message}", Options.SoundName, ex.Message);
-            _error = SoundboardSound.IsDefaultGuild(Options.GuildId) ? "Não tocou" : "Som de outro servidor";
-            Refresh();
-            _ = ClearErrorAsync();
-        }
+        await Session.PlaySoundboardSoundAsync(new SoundboardSound(id, Options.SoundName ?? id, Options.GuildId, Options.Emoji),
+            cancellationToken).ConfigureAwait(false);
+        // Tocando: verde, com a barra esvaziando pela duração do som.
+        ShowFeedback(true, await SoundDuration.GetAsync(id, cancellationToken).ConfigureAwait(false) ?? FallbackDuration);
     }
 
-    /// <summary>Redesenha a barra a cada 100 ms até o som acabar (tocar de novo reinicia a contagem).</summary>
-    private async Task AnimateAsync()
-    {
-        try
-        {
-            while (Context.Host.Time.GetUtcNow() - _playStart < _playLength)
-            {
-                Refresh();
-                await Task.Delay(FrameInterval, Context.Host.Time, Context.Stopping).ConfigureAwait(false);
-            }
-        }
-        catch (OperationCanceledException)
-        {
-        }
-        finally
-        {
-            _playing = false;
-            Refresh();
-        }
-    }
-
-    private async Task ClearErrorAsync()
-    {
-        await Task.Delay(ErrorTime, Context.Host.Time).ConfigureAwait(false);
-        _error = null;
-        Refresh();
-    }
+    /// <summary>Ex.: "Invalid Sound" para som de outro servidor sem Nitro (visto no teste de 30/10).</summary>
+    protected override string FailureText(Exception error) =>
+        error is DiscordRpcException && !SoundboardSound.IsDefaultGuild(Options.GuildId) ? "Som de outro servidor" : "Não tocou";
 }
 
 public enum NotificationPress
@@ -213,12 +158,13 @@ public sealed class NotificationsInstance(IWidgetContext context) : DiscordOptio
         switch (Options.OnPress)
         {
             case NotificationPress.Open when Shown(list)?.ChannelId is { } channelId:
-                await Session.SendAsync("SELECT_TEXT_CHANNEL", new JsonObject { ["channel_id"] = channelId }, cancellationToken)
-                    .ConfigureAwait(false);
+                await ConfirmAsync(() => Session.SendAsync("SELECT_TEXT_CHANNEL", new JsonObject { ["channel_id"] = channelId },
+                    cancellationToken)).ConfigureAwait(false);
                 break;
             case NotificationPress.Clear:
                 _index = null;
                 Session.ClearNotifications();
+                ShowFeedback(true);
                 break;
             case NotificationPress.CycleOldest when list.Count > 0:
                 _index = _index is { } i && i + 1 < list.Count ? i + 1 : 0;
@@ -278,8 +224,13 @@ public sealed class ServerStatsInstance : DiscordOptionsInstance<ServerStatsOpti
         return new ButtonVisual(Glyph, $"{counts.Online:N0} online") { Detail = $"{counts.Members:N0} membros · {counts.Name}" };
     }
 
-    protected override Task OnReadyTouchAsync(TouchEvent touch, CancellationToken cancellationToken) =>
-        touch.Kind == TouchKind.Tap ? RefreshCountsAsync(cancellationToken) : Task.CompletedTask;
+    protected override async Task OnReadyTouchAsync(TouchEvent touch, CancellationToken cancellationToken)
+    {
+        if (touch.Kind != TouchKind.Tap || Options.GuildId is not { } guildId)
+            return;
+        _counts = await Session.GetGuildCountsAsync(guildId, cancellationToken).ConfigureAwait(false);
+        ShowFeedback(true);
+    }
 
     public override async Task SaveOptionsAsync(ServerStatsOptions options)
     {

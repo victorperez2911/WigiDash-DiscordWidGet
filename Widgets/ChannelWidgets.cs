@@ -112,8 +112,8 @@ public sealed class ChannelInstance(IWidgetContext context, bool voice) : Discor
             return;
         if (!IsVoice)
         {
-            await Session.SendAsync("SELECT_TEXT_CHANNEL", new JsonObject { ["channel_id"] = channelId }, cancellationToken)
-                .ConfigureAwait(false);
+            await ConfirmAsync(() => Session.SendAsync("SELECT_TEXT_CHANNEL", new JsonObject { ["channel_id"] = channelId },
+                cancellationToken)).ConfigureAwait(false);
             return;
         }
         await Session.SelectVoiceChannelAsync(IsInChannel ? null : channelId, cancellationToken).ConfigureAwait(false);

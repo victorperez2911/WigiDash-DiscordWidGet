@@ -112,7 +112,78 @@ public abstract class DiscordButtonInstance : IWidgetInstance
             DiscordState.Failed => "Erro de conexão",
             _ => "Conectando...",
         };
-        return detail is null ? GetVisual() : new ButtonVisual(Glyph, Label) { Detail = detail, Dimmed = true };
+        if (detail is not null)
+            return new ButtonVisual(Glyph, Label) { Detail = detail, Dimmed = true };
+
+        var visual = GetVisual();
+        if (!_feedbackActive)
+            return visual;
+        // Retorno do toque por cima do desenho normal: verde com a barra esvaziando, ou vermelho se falhou.
+        var elapsed = Context.Host.Time.GetUtcNow() - _feedbackStart;
+        var remaining = 1 - Math.Clamp(elapsed / _feedbackLength, 0, 1);
+        return visual with
+        {
+            Accent = _feedbackOk ? ButtonRenderer.Success : ButtonRenderer.Danger,
+            Detail = _feedbackText ?? visual.Detail,
+            Dimmed = false,
+            Level = remaining,
+        };
+    }
+
+    private static readonly TimeSpan FeedbackFrame = TimeSpan.FromMilliseconds(100);
+    private static readonly TimeSpan FailureFeedback = TimeSpan.FromSeconds(2);
+
+    /// <summary>Duração padrão do retorno de sucesso.</summary>
+    protected static readonly TimeSpan DefaultFeedback = TimeSpan.FromMilliseconds(800);
+
+    private DateTimeOffset _feedbackStart;
+    private TimeSpan _feedbackLength;
+    private bool _feedbackOk;
+    private string? _feedbackText;
+    private bool _feedbackActive;
+
+    /// <summary>
+    /// Mostra o retorno do toque: verde com uma barra que esvazia em <paramref name="length"/> (sucesso) ou
+    /// vermelho (falha). Chame só depois que o Discord respondeu ao comando, nunca por conta própria.
+    /// Chamar de novo durante a animação reinicia a contagem.
+    /// </summary>
+    protected void ShowFeedback(bool success, TimeSpan? length = null, string? text = null)
+    {
+        _feedbackOk = success;
+        _feedbackText = text;
+        _feedbackLength = length ?? (success ? DefaultFeedback : FailureFeedback);
+        _feedbackStart = Context.Host.Time.GetUtcNow();
+        if (_feedbackActive)
+            return;
+        _feedbackActive = true;
+        _ = AnimateFeedbackAsync();
+    }
+
+    /// <summary>Roda o comando e mostra o retorno de sucesso quando o Discord confirma.</summary>
+    protected async Task ConfirmAsync(Func<Task> command, TimeSpan? length = null)
+    {
+        await command().ConfigureAwait(false);
+        ShowFeedback(true, length);
+    }
+
+    private async Task AnimateFeedbackAsync()
+    {
+        try
+        {
+            while (Context.Host.Time.GetUtcNow() - _feedbackStart < _feedbackLength)
+            {
+                Refresh();
+                await Task.Delay(FeedbackFrame, Context.Host.Time, Context.Stopping).ConfigureAwait(false);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        finally
+        {
+            _feedbackActive = false;
+            Refresh();
+        }
     }
 
     public async ValueTask OnTouchAsync(TouchEvent touch, CancellationToken cancellationToken)
@@ -135,11 +206,16 @@ public abstract class DiscordButtonInstance : IWidgetInstance
         {
             await OnReadyTouchAsync(touch, cancellationToken).ConfigureAwait(false);
         }
-        catch (Exception ex) when (ex is DiscordRpcException or InvalidOperationException or IOException or TimeoutException)
+        catch (Exception ex) when (ex is DiscordRpcException or InvalidOperationException or IOException or TimeoutException
+                                       or HttpRequestException)
         {
             Context.Logger.LogWarning(ex, "Discord: comando de {Widget} falhou", Label);
+            ShowFeedback(false, text: FailureText(ex));
         }
     }
+
+    /// <summary>Texto curto do retorno de falha; os widgets podem trocar (ex.: som de outro servidor).</summary>
+    protected virtual string FailureText(Exception error) => "Falhou";
 
     /// <summary>Redesenha e avisa a tela de configurações.</summary>
     protected void Refresh()
