@@ -1,0 +1,64 @@
+@* Som do widget Soundboard, com busca (a lista do Discord pode ser grande). *@
+<MudStack Spacing="2">
+    @if (Instance.Session.State != DiscordState.Ready)
+    {
+        <MudText Typo="Typo.caption" Color="Color.Warning">Conecte o Discord para ver os sons.</MudText>
+    }
+    else
+    {
+        <MudTextField T="string" @bind-Value="_search" Immediate="true" Label="Buscar som" Variant="Variant.Outlined"
+                      Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" Style="max-width: 320px" />
+        <MudList T="string" SelectedValue="Instance.Options.SoundId" SelectedValueChanged="Select" Dense="true"
+                 Style="max-height: 260px; overflow-y: auto">
+            @foreach (var sound in Filtered)
+            {
+                <MudListItem T="string" Value="@sound.Id" Text="@($"{sound.Emoji} {sound.Name}".Trim())" />
+            }
+        </MudList>
+        <MudText Typo="Typo.caption" Color="Color.Secondary">O som só toca quando você está numa call.</MudText>
+    }
+    @if (_error is not null)
+    {
+        <MudText Typo="Typo.caption" Color="Color.Error">@_error</MudText>
+    }
+</MudStack>
+
+@code {
+    [Parameter, EditorRequired]
+    public SoundboardInstance Instance { get; set; } = default!;
+
+    private IReadOnlyList<SoundboardSound> _sounds = [];
+    private string _search = string.Empty;
+    private string? _error;
+
+    private IEnumerable<SoundboardSound> Filtered => string.IsNullOrWhiteSpace(_search)
+        ? _sounds
+        : _sounds.Where(s => s.Name.Contains(_search, StringComparison.OrdinalIgnoreCase));
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (Instance.Session.State != DiscordState.Ready)
+            return;
+        try
+        {
+            _sounds = await Instance.Session.GetSoundboardSoundsAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+    }
+
+    private Task Select(string? id)
+    {
+        if (_sounds.FirstOrDefault(s => s.Id == id) is not { } sound)
+            return Task.CompletedTask;
+        return Instance.SaveOptionsAsync(new SoundboardOptions
+        {
+            SoundId = sound.Id,
+            SoundName = sound.Name,
+            GuildId = sound.GuildId,
+            Emoji = sound.Emoji,
+        });
+    }
+}
