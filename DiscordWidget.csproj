@@ -42,6 +42,10 @@
     <None Remove="discord_app_icon.png" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="DiscordWidget.Tests" />
+  </ItemGroup>
+
   <!-- Os testes têm projeto próprio. -->
   <ItemGroup>
     <Compile Remove="tests\**" />
