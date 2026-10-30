@@ -42,7 +42,32 @@ public sealed class SoundboardInstance(IWidgetContext context) : DiscordOptionsI
     protected override string Label => "Soundboard";
 
     private static readonly TimeSpan ErrorTime = TimeSpan.FromSeconds(3);
+    /// <summary>Duração usada quando não deu para ler a do arquivo.</summary>
+    private static readonly TimeSpan FallbackDuration = TimeSpan.FromSeconds(2);
+    private static readonly TimeSpan FrameInterval = TimeSpan.FromMilliseconds(100);
     private string? _error;
+    private DateTimeOffset _playStart;
+    private TimeSpan _playLength;
+    private bool _playing;
+
+    protected internal override async ValueTask LoadSettingsAsync(CancellationToken cancellationToken)
+    {
+        await base.LoadSettingsAsync(cancellationToken).ConfigureAwait(false);
+        PrefetchDuration();
+    }
+
+    public override async Task SaveOptionsAsync(SoundboardOptions options)
+    {
+        await base.SaveOptionsAsync(options).ConfigureAwait(false);
+        PrefetchDuration();
+    }
+
+    /// <summary>Baixa a duração antes do primeiro toque, para a barra já começar certa.</summary>
+    private void PrefetchDuration()
+    {
+        if (Options.SoundId is { } id)
+            _ = SoundDuration.GetAsync(id);
+    }
 
     public override Type? OptionsComponent => typeof(SoundboardOptionsPanel);
 
@@ -54,6 +79,13 @@ public sealed class SoundboardInstance(IWidgetContext context) : DiscordOptionsI
         var name = Options.SoundName ?? Label;
         if (_error is not null)
             return new ButtonVisual(Glyph, name) { ImageUrl = image, Accent = ButtonRenderer.Danger, Detail = _error };
+        if (_playing)
+        {
+            // Tocando: verde, com a barra esvaziando pela duração do som.
+            var elapsed = Context.Host.Time.GetUtcNow() - _playStart;
+            var remaining = 1 - Math.Clamp(elapsed / _playLength, 0, 1);
+            return new ButtonVisual(Glyph, name) { ImageUrl = image, Accent = ButtonRenderer.Success, Level = remaining };
+        }
         // Ensurdecido, o Discord não toca o soundboard: o botão fica apagado.
         if (Session.Voice is { Deaf: true })
             return new ButtonVisual(Glyph, name) { ImageUrl = image, Detail = "Ensurdecido", Dimmed = true };
@@ -70,6 +102,13 @@ public sealed class SoundboardInstance(IWidgetContext context) : DiscordOptionsI
         {
             await Session.PlaySoundboardSoundAsync(new SoundboardSound(id, Options.SoundName ?? id, Options.GuildId, Options.Emoji),
                 cancellationToken).ConfigureAwait(false);
+            _playLength = await SoundDuration.GetAsync(id, cancellationToken).ConfigureAwait(false) ?? FallbackDuration;
+            _playStart = Context.Host.Time.GetUtcNow();
+            if (!_playing)
+            {
+                _playing = true;
+                _ = AnimateAsync();
+            }
         }
         catch (DiscordRpcException ex)
         {
@@ -78,6 +117,27 @@ public sealed class SoundboardInstance(IWidgetContext context) : DiscordOptionsI
             _error = SoundboardSound.IsDefaultGuild(Options.GuildId) ? "Não tocou" : "Som de outro servidor";
             Refresh();
             _ = ClearErrorAsync();
+        }
+    }
+
+    /// <summary>Redesenha a barra a cada 100 ms até o som acabar (tocar de novo reinicia a contagem).</summary>
+    private async Task AnimateAsync()
+    {
+        try
+        {
+            while (Context.Host.Time.GetUtcNow() - _playStart < _playLength)
+            {
+                Refresh();
+                await Task.Delay(FrameInterval, Context.Host.Time, Context.Stopping).ConfigureAwait(false);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        finally
+        {
+            _playing = false;
+            Refresh();
         }
     }
 

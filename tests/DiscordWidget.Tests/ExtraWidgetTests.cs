@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using OpenWigi.Sdk;
 using WigiDash.DiscordWidget.Discord;
+using WigiDash.DiscordWidget.Rendering;
 using WigiDash.DiscordWidget.Widgets;
 
 namespace DiscordWidget.Tests;
@@ -56,6 +57,10 @@ public sealed class ExtraWidgetTests : IAsyncLifetime
 
         var play = await _discord.WaitForCommandAsync("PLAY_SOUNDBOARD_SOUND");
         Assert.Equal("s1", (string?)play["args"]!["sound_id"]);
+
+        // Feedback do toque: verde com a barra de duração.
+        Assert.Equal(ButtonRenderer.Success, widget.CurrentVisual().Accent);
+        Assert.NotNull(widget.CurrentVisual().Level);
         Assert.Null(play["args"]!["guild_id"]);
     }
 
