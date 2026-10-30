@@ -52,7 +52,7 @@ public sealed class PluginTests
         var theme = new WidgetTheme();
         Save(ButtonRenderer.Render(WidgetSize.Small.PixelSize, theme, new ButtonVisual(Glyphs.Video, "Câmera desligada") { Slashed = true }),
             Path.Combine(output, "estado-camera-off.png"));
-        Save(ButtonRenderer.Render(WidgetSize.Small.PixelSize, theme, new ButtonVisual(Glyphs.Volume, "60%") { Level = 0.6, Hints = AdjustHints.Vertical }),
+        Save(ButtonRenderer.Render(WidgetSize.Small.PixelSize, theme, new ButtonVisual(Glyphs.Volume, "60%") { Level = 0.6, Hints = AdjustHints.Horizontal }),
             Path.Combine(output, "estado-volume-1x1.png"));
         Save(ButtonRenderer.Render(WidgetSize.Wide.PixelSize, theme, new ButtonVisual(Glyphs.Volume, "60%") { Level = 0.6, Hints = AdjustHints.Horizontal }),
             Path.Combine(output, "estado-volume-2x1.png"));

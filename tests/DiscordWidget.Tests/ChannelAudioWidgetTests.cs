@@ -238,18 +238,18 @@ public sealed class ChannelAudioWidgetTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task Volume_no_1x1_metade_de_cima_aumenta_e_de_baixo_abaixa()
+    public async Task Volume_no_1x1_esquerda_abaixa_e_direita_aumenta()
     {
         _outputVolume = 50;
         await using var widget = await CreateAsync<VolumeControlInstance>(new VolumeControlWidget());
         await widget.SaveOptionsAsync(new VolumeOptions { Side = AudioSide.Output, Step = 10 });
 
-        await widget.OnTouchAsync(new TouchEvent(TouchKind.Tap, 50, 10, TimeSpan.Zero), CancellationToken.None);
+        await widget.OnTouchAsync(new TouchEvent(TouchKind.Tap, WidgetSize.Small.PixelSize.Width - 10, 60, TimeSpan.Zero), CancellationToken.None);
         Assert.Equal(60, _outputVolume);
 
-        await widget.OnTouchAsync(new TouchEvent(TouchKind.Tap, 50, WidgetSize.Small.PixelSize.Height - 10, TimeSpan.Zero), CancellationToken.None);
+        await widget.OnTouchAsync(new TouchEvent(TouchKind.Tap, 10, 60, TimeSpan.Zero), CancellationToken.None);
         Assert.Equal(50, _outputVolume);
-        Assert.Equal(AdjustHints.Vertical, widget.CurrentVisual().Hints);
+        Assert.Equal(AdjustHints.Horizontal, widget.CurrentVisual().Hints);
     }
 
     [Fact]
@@ -272,8 +272,8 @@ public sealed class ChannelAudioWidgetTests : IAsyncLifetime
         await widget.SaveOptionsAsync(new UserVolumeOptions { UserId = "u2", UserName = "Amigo", Step = 20 });
         Assert.Equal("Amigo", widget.CurrentVisual().Label);
 
-        // Metade de baixo do 1x1 abaixa.
-        await widget.OnTouchAsync(new TouchEvent(TouchKind.Tap, 50, WidgetSize.Small.PixelSize.Height - 10, TimeSpan.Zero), CancellationToken.None);
+        // Lado esquerdo abaixa.
+        await widget.OnTouchAsync(new TouchEvent(TouchKind.Tap, 10, 60, TimeSpan.Zero), CancellationToken.None);
         Assert.Equal(80, _friendVolume);
         await FakeDiscord.WaitUntilAsync(() => widget.CurrentVisual().Detail == "80%");
 

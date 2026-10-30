@@ -13,7 +13,7 @@
 @if (Action == VolumeAction.Adjust)
 {
     <MudSlider T="int" Value="Step" ValueChanged="s => Changed.InvokeAsync((Action, s, Value))" Min="5" Max="50" Step="5" Color="Color.Primary">
-        Passo: @Math.Abs(Step)% por toque (1x1: metade de cima aumenta, de baixo abaixa; 2x1: esquerda abaixa, direita aumenta)
+        Passo: @Math.Abs(Step)% por toque (lado esquerdo abaixa, direito aumenta)
     </MudSlider>
 }
 @if (Action == VolumeAction.Set)

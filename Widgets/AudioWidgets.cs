@@ -32,8 +32,8 @@ public enum VolumeAction
 internal static class VolumeTouch
 {
     /// <summary>
-    /// Quanto o toque soma ao volume. No 1x1, metade de cima aumenta e a de baixo abaixa; no largo, metade
-    /// esquerda abaixa e a direita aumenta; swipe para cima/baixo também. O tile desenha o "+" e o "−".
+    /// Quanto o toque soma ao volume: metade esquerda abaixa e a direita aumenta (o tile desenha o "−" e o "+"
+    /// dos lados do ícone); swipe para cima/baixo também.
     /// </summary>
     public static int? Delta(TouchEvent touch, WidgetSize size, int step)
     {
@@ -42,14 +42,13 @@ internal static class VolumeTouch
         {
             TouchKind.SwipeUp => magnitude,
             TouchKind.SwipeDown => -magnitude,
-            TouchKind.Tap when size.Columns > 1 => touch.X < size.PixelSize.Width / 2 ? -magnitude : magnitude,
-            TouchKind.Tap => touch.Y < size.PixelSize.Height / 2 ? magnitude : -magnitude,
+            TouchKind.Tap => touch.X < size.PixelSize.Width / 2 ? -magnitude : magnitude,
             _ => null,
         };
     }
 
-    /// <summary>Onde ficam o "−" e o "+" no tile, conforme o tamanho.</summary>
-    public static AdjustHints Hints(WidgetSize size) => size.Columns > 1 ? AdjustHints.Horizontal : AdjustHints.Vertical;
+    /// <summary>"−" e "+" dos lados do ícone, em qualquer tamanho.</summary>
+    public static AdjustHints Hints(WidgetSize size) => AdjustHints.Horizontal;
 }
 
 public sealed record AudioDeviceOptions

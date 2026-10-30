@@ -48,10 +48,8 @@ public sealed record ButtonVisual(string Glyph, string Label)
 public enum AdjustHints
 {
     None,
-    /// <summary>"−" à esquerda, "+" à direita (2x1).</summary>
+    /// <summary>"−" à esquerda e "+" à direita do ícone.</summary>
     Horizontal,
-    /// <summary>"+" em cima, "−" embaixo (1x1).</summary>
-    Vertical,
 }
 
 /// <summary>Um avatar: imagem do CDN (ou a inicial do nome enquanto não chega) e o anel de quem está falando.</summary>
@@ -127,7 +125,7 @@ public static class ButtonRenderer
             }
 
             if (visual.Hints != AdjustHints.None)
-                DrawHints(g, size, visual.Hints, foreground);
+                DrawHints(g, size, iconArea, background, foreground);
 
             if (visual.Badge is { } badge)
                 DrawBadge(g, size, theme, badge, background, foreground);
@@ -256,22 +254,29 @@ public static class ButtonRenderer
         g.DrawLine(line, cx - half, cy - half, cx + half, cy + half);
     }
 
-    private static void DrawHints(Graphics g, PixelSize size, AdjustHints hints, Color foreground)
+    /// <summary>
+    /// Botões redondos de "−" (esquerda) e "+" (direita), na altura do ícone: mostram que a metade esquerda
+    /// do tile abaixa e a direita aumenta.
+    /// </summary>
+    private static void DrawHints(Graphics g, PixelSize size, RectangleF iconArea, Color background, Color foreground)
     {
-        var box = Math.Max(22f, size.Height / 5f);
-        using var font = new Font("Segoe UI Semibold", box * 0.8f, GraphicsUnit.Pixel);
-        using var brush = new SolidBrush(Color.FromArgb(200, foreground));
-        if (hints == AdjustHints.Horizontal)
-        {
-            var y = (size.Height - box) / 2 - box / 3;
-            g.DrawString("−", font, brush, new RectangleF(6, y, box, box), Centered);
-            g.DrawString("+", font, brush, new RectangleF(size.Width - box - 6, y, box, box), Centered);
-        }
-        else
-        {
-            g.DrawString("+", font, brush, new RectangleF(size.Width - box - 4, 4, box, box), Centered);
-            g.DrawString("−", font, brush, new RectangleF(size.Width - box - 4, size.Height / 2f, box, box), Centered);
-        }
+        var d = Math.Clamp(iconArea.Height * 0.5f, 26f, 44f);
+        var y = iconArea.Y + (iconArea.Height - d) / 2;
+        var margin = Math.Max(8f, size.Width * 0.05f);
+        DrawRoundButton(g, new RectangleF(margin, y, d, d), "−", background, foreground);
+        DrawRoundButton(g, new RectangleF(size.Width - margin - d, y, d, d), "+", background, foreground);
+    }
+
+    private static void DrawRoundButton(Graphics g, RectangleF rect, string symbol, Color background, Color foreground)
+    {
+        using (var fill = new SolidBrush(Color.FromArgb(70, foreground)))
+            g.FillEllipse(fill, rect);
+        using (var border = new Pen(Color.FromArgb(200, foreground), Math.Max(2f, rect.Width / 16)))
+            g.DrawEllipse(border, rect);
+        using var font = new Font("Segoe UI Semibold", rect.Height * 0.72f, GraphicsUnit.Pixel);
+        using var brush = new SolidBrush(foreground);
+        // O "−" e o "+" da fonte ficam um pouco abaixo do centro; sobe 6% para centralizar no círculo.
+        g.DrawString(symbol, font, brush, rect with { Y = rect.Y - rect.Height * 0.06f }, Centered);
     }
 
     /// <summary>Pílula com o contador no canto superior direito, como o "2" de pessoas da Elgato.</summary>
