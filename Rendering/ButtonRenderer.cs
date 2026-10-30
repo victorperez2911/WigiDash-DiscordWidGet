@@ -152,10 +152,10 @@ public static class ButtonRenderer
             var rect = new RectangleF(x + step * i, y, d, d);
             if (shown[i].Speaking)
             {
-                // Anel grosso de quem fala; no fundo verde (você na call) o verde sumiria, então vai branco.
+                // Anel de quem fala; no fundo verde (você na call) o verde sumiria, então vai branco.
                 var speaking = background.ToArgb() == Success.ToArgb() ? Color.White : Success;
                 using var glow = new SolidBrush(speaking);
-                g.FillEllipse(glow, RectangleF.Inflate(rect, ring * 2, ring * 2));
+                g.FillEllipse(glow, RectangleF.Inflate(rect, ring * 1.1f, ring * 1.1f));
             }
             else
             {
