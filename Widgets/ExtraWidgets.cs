@@ -335,7 +335,7 @@ public sealed class MediaToggleInstance(IWidgetContext context, bool video) : Di
         return active switch
         {
             true => new ButtonVisual(Glyph, video ? "Câmera ligada" : "Transmitindo") { Accent = ButtonRenderer.Success },
-            false => new ButtonVisual(video ? Glyphs.VideoOff : Glyph, video ? "Câmera desligada" : "Sem transmissão"),
+            false => new ButtonVisual(Glyph, video ? "Câmera desligada" : "Sem transmissão") { Slashed = true },
             null => new ButtonVisual(Glyph, Label) { Detail = "Toque para alternar" },
         };
     }

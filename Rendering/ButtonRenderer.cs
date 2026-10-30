@@ -31,6 +31,9 @@ public sealed record ButtonVisual(string Glyph, string Label)
     /// <summary>Contador no canto superior direito (ex.: pessoas no canal).</summary>
     public int? Badge { get; init; }
 
+    /// <summary>Risco diagonal sobre o ícone (ex.: câmera desligada = a mesma câmera, cortada).</summary>
+    public bool Slashed { get; init; }
+
     /// <summary>"−" e "+" nas bordas, mostrando onde tocar para abaixar e aumentar.</summary>
     public AdjustHints Hints { get; init; }
 
@@ -110,9 +113,12 @@ public static class ButtonRenderer
             }
             else
             {
-                using var iconFont = new Font(IconFont, Math.Min(iconArea.Height * 0.62f, size.Width * 0.4f), GraphicsUnit.Pixel);
+                var glyphSize = Math.Min(iconArea.Height * 0.62f, size.Width * 0.4f);
+                using var iconFont = new Font(IconFont, glyphSize, GraphicsUnit.Pixel);
                 using var brush = new SolidBrush(foreground);
                 g.DrawString(visual.Glyph, iconFont, brush, iconArea, Centered);
+                if (visual.Slashed)
+                    DrawSlash(g, iconArea, glyphSize, background, foreground);
             }
 
             if (visual.Hints != AdjustHints.None)
@@ -216,6 +222,19 @@ public static class ButtonRenderer
         using var font = new Font("Segoe UI Semibold", rect.Height * 0.45f, GraphicsUnit.Pixel);
         var initial = face.Name.Length > 0 ? char.ToUpperInvariant(face.Name[0]).ToString() : "?";
         g.DrawString(initial, font, Brushes.White, rect, Centered);
+    }
+
+    /// <summary>Risco do canto superior esquerdo ao inferior direito, com contorno da cor do fundo.</summary>
+    private static void DrawSlash(Graphics g, RectangleF area, float glyphSize, Color background, Color foreground)
+    {
+        var cx = area.X + area.Width / 2;
+        var cy = area.Y + area.Height / 2;
+        var half = glyphSize * 0.55f;
+        var width = Math.Max(3f, glyphSize / 12);
+        using (var gap = new Pen(background, width * 3) { StartCap = LineCap.Round, EndCap = LineCap.Round })
+            g.DrawLine(gap, cx - half, cy - half, cx + half, cy + half);
+        using var line = new Pen(foreground, width) { StartCap = LineCap.Round, EndCap = LineCap.Round };
+        g.DrawLine(line, cx - half, cy - half, cx + half, cy + half);
     }
 
     private static void DrawHints(Graphics g, PixelSize size, AdjustHints hints, Color foreground)
