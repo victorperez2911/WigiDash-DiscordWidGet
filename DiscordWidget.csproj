@@ -31,7 +31,7 @@
   <!-- O SDK vem do nuget.org. Para testar mudanças no SDK antes de publicar, compile com
        -p:UseLocalOpenWigiSdk=true e o repo OpenWigiDashManager clonado ao lado deste. -->
   <PropertyGroup>
-    <OpenWigiSdkVersion>2.0.0-preview.2</OpenWigiSdkVersion>
+    <OpenWigiSdkVersion>2.0.0-preview.3</OpenWigiSdkVersion>
     <OpenWigiSdkProject Condition="'$(OpenWigiSdkProject)' == ''">$(MSBuildThisFileDirectory)..\OpenWigiDashManager\src\OpenWigi.Sdk\OpenWigi.Sdk.csproj</OpenWigiSdkProject>
   </PropertyGroup>
 
