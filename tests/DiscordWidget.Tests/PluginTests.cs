@@ -3,6 +3,7 @@ using System.Drawing.Imaging;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using OpenWigi.Sdk;
+using WigiDash.DiscordWidget.Rendering;
 using WigiDash.DiscordWidget.Widgets;
 
 namespace DiscordWidget.Tests;
@@ -41,6 +42,24 @@ public sealed class PluginTests
                 Save(frame, Path.Combine(output, $"{widget.Manifest.Name.Replace(':', '-')}-{size.Columns}x{size.Rows}.png"));
             }
         }
+    }
+
+    [Fact]
+    public void Estados_desenham_sem_erro()
+    {
+        var output = Path.Combine(AppContext.BaseDirectory, "previews");
+        Directory.CreateDirectory(output);
+        var theme = new WidgetTheme();
+        Save(ButtonRenderer.Render(WidgetSize.Small.PixelSize, theme, new ButtonVisual(Glyphs.Video, "Câmera desligada") { Slashed = true }),
+            Path.Combine(output, "estado-camera-off.png"));
+        Save(ButtonRenderer.Render(WidgetSize.Small.PixelSize, theme, new ButtonVisual(Glyphs.Volume, "60%") { Level = 0.6, Hints = AdjustHints.Horizontal }),
+            Path.Combine(output, "estado-volume-1x1.png"));
+        Save(ButtonRenderer.Render(WidgetSize.Wide.PixelSize, theme, new ButtonVisual(Glyphs.Volume, "60%") { Level = 0.6, Hints = AdjustHints.Horizontal }),
+            Path.Combine(output, "estado-volume-2x1.png"));
+        Save(ButtonRenderer.Render(WidgetSize.Small.PixelSize, theme, new ButtonVisual(Glyphs.Microphone, "Detecção de voz") { GlyphBadge = Glyphs.Volume, Detail = "Modo de voz" }),
+            Path.Combine(output, "estado-modo-voz.png"));
+        Save(ButtonRenderer.Render(WidgetSize.Small.PixelSize, theme, new ButtonVisual(Glyphs.Microphone, "Push to Talk") { Accent = ButtonRenderer.Success, GlyphBadge = Glyphs.Touch, Detail = "Modo de voz" }),
+            Path.Combine(output, "estado-modo-ptt.png"));
     }
 
     internal static void Save(WidgetFrame frame, string path)
