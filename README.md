@@ -54,15 +54,25 @@ só são liberados para o dono do app e para quem está no time dele.
 
 ## Instalação
 
-Baixe o zip da última [release](https://github.com/victorperez2911/WigiDash-DiscordWidGet/releases) e
+O plugin é publicado no nuget.org como `victorperez2911.OpenWigiDash.Discord` (pacote do tipo
+`OpenWigiDashPlugin`), e o OpenWigiDashManager instala por lá.
+
+Para instalar à mão, baixe o zip da última [release](https://github.com/victorperez2911/WigiDash-DiscordWidGet/releases) e
 extraia a pasta `DiscordWidget` em `%LOCALAPPDATA%\OpenWigiDash\Widgets\`. Feche o manager pela bandeja antes
 de trocar a DLL.
+
+## Publicar uma versão
+
+Crie a tag `v<versão>` (ex.: `v2.0.0-preview.2`) no branch `net10`. O workflow `release.yml` roda os testes,
+publica o pacote no nuget.org por Trusted Publishing e anexa o zip à release do GitHub. Enquanto o SDK for
+preview, a versão do plugin também precisa ser preview.
 
 ## Desenvolvimento
 
 ```powershell
 dotnet test tests/DiscordWidget.Tests     # testes contra um Discord simulado no pipe
 .\deploy.ps1 -RestartManager              # build e cópia para a pasta de widgets do usuário
+dotnet pack -c Release                    # gera o pacote de plugin (.nupkg)
 ```
 
 Para testar contra o SDK local em vez do pacote do nuget.org, compile com `-p:UseLocalOpenWigiSdk=true` e o
