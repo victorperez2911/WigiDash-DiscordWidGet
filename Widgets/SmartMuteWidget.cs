@@ -16,7 +16,8 @@ public sealed class SmartMuteWidget : DiscordWidgetBase
     public override WidgetManifest Manifest { get; } = CreateManifest(
         new Guid("248cba1d-a161-4b9a-9f6d-9f814a897a37"),
         "Discord: Mute inteligente",
-        "Toque alterna o mute. Segurar inverte só enquanto o dedo está na tela: falando, segurar muta; mutado, segurar abre o microfone.");
+        "Toque alterna o mute. Segurar inverte só enquanto o dedo está na tela: falando, segurar muta; mutado, segurar abre o microfone.",
+        iconButton: true);
 
     protected override ButtonVisual Preview => new(Glyphs.Microphone, "Mute inteligente") { GlyphBadge = Glyphs.Touch };
 

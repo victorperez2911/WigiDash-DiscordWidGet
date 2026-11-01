@@ -14,7 +14,8 @@ public sealed class PushToTalkWidget : DiscordWidgetBase
     public override WidgetManifest Manifest { get; } = CreateManifest(
         new Guid("1cae3be2-8320-49ec-baea-3d616df8150e"),
         "Discord: Push to Talk",
-        "Enquanto o dedo está no widget o microfone fica aberto; ao soltar, muta. Use com o microfone mutado.");
+        "Enquanto o dedo está no widget o microfone fica aberto; ao soltar, muta. Use com o microfone mutado.",
+        iconButton: true);
 
     protected override ButtonVisual Preview => new(Glyphs.Microphone, "Push to Talk") { GlyphBadge = Glyphs.Touch };
 
@@ -27,7 +28,8 @@ public sealed class PushToMuteWidget : DiscordWidgetBase
     public override WidgetManifest Manifest { get; } = CreateManifest(
         new Guid("0945c7cd-43de-4c5d-888a-21d0c775694c"),
         "Discord: Push to Mute",
-        "Enquanto o dedo está no widget o microfone fica mutado; ao soltar, volta como estava.");
+        "Enquanto o dedo está no widget o microfone fica mutado; ao soltar, volta como estava.",
+        iconButton: true);
 
     protected override ButtonVisual Preview => new(Glyphs.MicrophoneOff, "Push to Mute") { GlyphBadge = Glyphs.Touch };
 

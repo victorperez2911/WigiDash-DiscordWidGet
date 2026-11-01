@@ -41,17 +41,19 @@ public abstract class DiscordWidgetBase : IWidget
         ValueTask.FromResult<WidgetFrame?>(ButtonRenderer.Render(pixelSize, _host?.Theme ?? new WidgetTheme(), Preview));
 
     /// <summary>
-    /// Ficha padrão: Mini (meia célula, só ícone e rótulo), Small (o 1x1 de antes) e Wide (o 2x1), versão do plugin.
+    /// Ficha padrão: Small (o 1x1 de antes) e Wide (o 2x1). <paramref name="iconButton"/> acrescenta o Mini (meia
+    /// célula, 98x70), que só serve para botão de ícone (mute, microfone); widget com texto, lista ou canal começa
+    /// no Small (decisão do Victor para o SDK 3.0).
     /// </summary>
-    protected static WidgetManifest CreateManifest(Guid id, string name, string description) => new()
+    protected static WidgetManifest CreateManifest(Guid id, string name, string description, bool iconButton = false) => new()
     {
         Id = id,
         Name = name,
-        Version = typeof(DiscordWidgetBase).Assembly.GetName().Version ?? new Version(2, 0, 0),
+        Version = typeof(DiscordWidgetBase).Assembly.GetName().Version ?? new Version(3, 0, 0),
         Author = "Victor Perez",
         Website = Website,
         Description = description,
-        SupportedSizes = [WidgetSize.Mini, WidgetSize.Small, WidgetSize.Wide],
+        SupportedSizes = iconButton ? [WidgetSize.Mini, WidgetSize.Small, WidgetSize.Wide] : [WidgetSize.Small, WidgetSize.Wide],
     };
 }
 

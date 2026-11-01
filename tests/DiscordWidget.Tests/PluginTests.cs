@@ -27,6 +27,19 @@ public sealed class PluginTests
     }
 
     [Fact]
+    public void Mini_so_nos_botoes_de_icone()
+    {
+        string[] iconButtons =
+        [
+            "Discord: Mute", "Discord: Deafen", "Discord: Push to Talk", "Discord: Push to Mute",
+            "Discord: Mute inteligente", "Discord: Voice Input Mode", "Discord: Soundboard",
+            "Discord: Video Toggle", "Discord: Stream Toggle",
+        ];
+        foreach (var widget in LoadWidgets())
+            Assert.Equal(iconButtons.Contains(widget.Manifest.Name), widget.Manifest.SupportedSizes.Contains(WidgetSize.Mini));
+    }
+
+    [Fact]
     public async Task Previa_de_cada_widget_desenha_em_todos_os_tamanhos_e_molduras()
     {
         var output = Path.Combine(AppContext.BaseDirectory, "previews");

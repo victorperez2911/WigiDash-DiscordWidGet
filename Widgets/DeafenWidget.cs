@@ -13,7 +13,8 @@ public sealed class DeafenWidget : DiscordWidgetBase
     public override WidgetManifest Manifest { get; } = CreateManifest(
         new Guid("82647130-6083-4199-8391-ad5cfe62fbd7"),
         "Discord: Deafen",
-        "Toque liga e desliga o áudio do Discord (ensurdecer). Fica vermelho quando está ensurdecido.");
+        "Toque liga e desliga o áudio do Discord (ensurdecer). Fica vermelho quando está ensurdecido.",
+        iconButton: true);
 
     protected override ButtonVisual Preview => new(Glyphs.Headphone, "Deafen");
 
