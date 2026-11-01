@@ -61,7 +61,12 @@ jobs:
 
     - name: Push to nuget.org
       shell: pwsh
-      run: dotnet nuget push "nupkgs/*.nupkg" --api-key ${{ steps.nuget.outputs.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
+      # No runner Windows o curinga não chega expandido ao dotnet: um push por arquivo.
+      run: |
+        Get-ChildItem nupkgs -Filter *.nupkg | ForEach-Object {
+          dotnet nuget push $_.FullName --api-key "${{ steps.nuget.outputs.NUGET_API_KEY }}" --source https://api.nuget.org/v3/index.json --skip-duplicate
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        }
 
     - name: Create Release
       uses: softprops/action-gh-release@v2
