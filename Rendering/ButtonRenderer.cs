@@ -55,7 +55,10 @@ public enum AdjustHints
 /// <summary>Um avatar: imagem do CDN (ou a inicial do nome enquanto não chega) e o anel de quem está falando.</summary>
 public sealed record AvatarFace(string? Url, string Name, bool Speaking);
 
-/// <summary>Desenha um <see cref="ButtonVisual"/> no tamanho do widget, com as cores e fontes do tema.</summary>
+/// <summary>
+/// Desenha um <see cref="ButtonVisual"/> na área de conteúdo do widget (SDK 3.0: o host pinta a moldura e o canto
+/// arredondado; aqui o quadro inteiro é preenchido). Os tamanhos vão do Mini (98x70 menos a moldura) ao tela cheia.
+/// </summary>
 public static class ButtonRenderer
 {
     public static readonly Color DiscordBlurple = Color.FromArgb(88, 101, 242);
@@ -71,8 +74,6 @@ public static class ButtonRenderer
         {
             g.SmoothingMode = SmoothingMode.AntiAlias;
             g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
-            g.Clear(Color.Black);
-
             // Padrão visual das imagens do plugin da Elgato: fundo azul do Discord; verde quando a ação está
             // ativa e vermelho quando algo está cortado (mutado, ensurdecido) vêm em Accent.
             var background = visual.Accent ?? DiscordBlurple;
@@ -82,18 +83,19 @@ public static class ButtonRenderer
                 background = Blend(background, Color.Black, 0.5);
                 foreground = Blend(foreground, background, 0.5);
             }
+            g.Clear(background);
 
-            using (var path = RoundedRect(new Rectangle(0, 0, size.Width, size.Height), theme.CornerRadius))
-            using (var brush = new SolidBrush(background))
-                g.FillPath(brush, path);
-
-            var hasDetail = !string.IsNullOrEmpty(visual.Detail);
-            var labelHeight = Math.Max(16, size.Height / 7);
-            var textBlock = labelHeight + (hasDetail ? labelHeight * 4 / 5 : 0) + 8;
-            var iconArea = new RectangleF(0, 6, size.Width, size.Height - textBlock - 6);
+            // Mini (meia célula): só ícone e rótulo curto, sem a segunda linha.
+            var compact = size.Height < 100;
+            var hasDetail = !compact && !string.IsNullOrEmpty(visual.Detail);
+            var labelHeight = compact ? Math.Max(12, size.Height / 5) : Math.Max(16, size.Height / 7);
+            // No Mini, a barra de nível precisa de espaço próprio embaixo do rótulo.
+            var textBlock = labelHeight + (hasDetail ? labelHeight * 4 / 5 : 0) + (compact ? (visual.Level is null ? 4 : 9) : 8);
+            var top = compact ? 3 : 6;
+            var iconArea = new RectangleF(0, top, size.Width, size.Height - textBlock - top);
 
             if (visual.Faces is { Count: > 0 } faces)
-                DrawFaces(g, iconArea, faces, background, size.Columns() > 1 ? 5 : 3);
+                DrawFaces(g, iconArea, faces, background, compact ? 2 : size.Width > size.Height * 1.8 ? 5 : 3);
             else if (AvatarCache.Get(visual.ImageUrl) is { } image)
             {
                 var side = Math.Min(iconArea.Height * 0.8f, size.Width * 0.45f);
@@ -145,8 +147,9 @@ public static class ButtonRenderer
 
             if (visual.Level is { } level)
             {
-                var inset = Math.Max(theme.CornerRadius / 2, 6);
-                var track = new RectangleF(inset, size.Height - 7, size.Width - inset * 2, 4);
+                // Longe dos cantos: o host corta o canto arredondado do conteúdo.
+                const int inset = 10;
+                var track = new RectangleF(inset, size.Height - 6, size.Width - inset * 2, compact ? 3 : 4);
                 using var trackBrush = new SolidBrush(Blend(background, foreground, 0.2));
                 using var fillBrush = new SolidBrush(foreground);
                 g.FillRectangle(trackBrush, track);
@@ -260,7 +263,7 @@ public static class ButtonRenderer
     /// </summary>
     private static void DrawHints(Graphics g, PixelSize size, RectangleF iconArea, Color background, Color foreground)
     {
-        var d = Math.Clamp(iconArea.Height * 0.5f, 26f, 44f);
+        var d = Math.Clamp(iconArea.Height * 0.5f, 16f, 44f);
         var y = iconArea.Y + (iconArea.Height - d) / 2;
         var margin = Math.Max(8f, size.Width * 0.05f);
         DrawRoundButton(g, new RectangleF(margin, y, d, d), "−", background, foreground);
@@ -288,7 +291,7 @@ public static class ButtonRenderer
         var text = count.ToString();
         var textWidth = g.MeasureString(text, font).Width;
         var width = height * 0.9f + textWidth + height * 0.3f;
-        var inset = Math.Max(theme.CornerRadius * 0.6f, 6);
+        var inset = 8f;
         var rect = new RectangleF(size.Width - width - inset, inset, width, height);
         using (var path = RoundedRect(Rectangle.Round(rect), (int)(height / 2)))
         using (var fill = new SolidBrush(Color.FromArgb(200, Blend(background, Color.Black, 0.55))))
@@ -338,9 +341,6 @@ public static class ButtonRenderer
         path.CloseFigure();
         return path;
     }
-
-    /// <summary>Quantas células de largura o quadro ocupa (para decidir quantos avatares cabem).</summary>
-    private static int Columns(this PixelSize size) => size.Width > WidgetGrid.CellWidth ? 2 : 1;
 
     /// <summary>A cor um pouco mais clara (pulso de atenção).</summary>
     public static Color Lighter(Color color) => Blend(color, Color.White, 0.3);
