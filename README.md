@@ -77,7 +77,7 @@ oficiais.
 
 ## Publicar uma versão
 
-Crie a tag `v<versão>` (ex.: `v2.0.0-preview.2`) no branch `net10`. O workflow `release.yml` roda os testes,
+Crie a tag `v<versão>` (ex.: `v2.0.0-preview.3`; a `v2.0.0-preview.2` é a primeira que saiu no nuget.org) no branch `net10`. O workflow `release.yml` roda os testes,
 publica o pacote no nuget.org por Trusted Publishing e anexa o zip à release do GitHub. Enquanto o SDK for
 preview, a versão do plugin também precisa ser preview.
 
