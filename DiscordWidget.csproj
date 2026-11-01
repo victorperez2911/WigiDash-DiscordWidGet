@@ -19,12 +19,12 @@
        "Publicar no nuget.org"). Enquanto o SDK for preview, o plugin também é (NU5104). -->
   <PropertyGroup>
     <OpenWigiDashPlugin>true</OpenWigiDashPlugin>
-    <PackageId>victorperez2911.OpenWigiDash.Discord</PackageId>
+    <PackageId>OpenWigiDash.Discord</PackageId>
     <Title>Discord</Title>
-    <Version>2.0.0-preview.3</Version>
+    <Version>2.0.0-preview.4</Version>
     <PackageTags>discord</PackageTags>
-    <PackageProjectUrl>https://github.com/victorperez2911/WigiDash-DiscordWidGet</PackageProjectUrl>
-    <RepositoryUrl>https://github.com/victorperez2911/WigiDash-DiscordWidGet</RepositoryUrl>
+    <PackageProjectUrl>https://github.com/OpenWigiDash/WigiDash-DiscordWidGet</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/OpenWigiDash/WigiDash-DiscordWidGet</RepositoryUrl>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageIcon>icon.png</PackageIcon>
   </PropertyGroup>
@@ -32,7 +32,7 @@
   <!-- O SDK vem do nuget.org. Para testar mudanças no SDK antes de publicar, compile com
        -p:UseLocalOpenWigiSdk=true e o repo OpenWigiDashManager clonado ao lado deste. -->
   <PropertyGroup>
-    <OpenWigiSdkVersion>2.0.0-preview.3</OpenWigiSdkVersion>
+    <OpenWigiSdkVersion>2.0.0-preview.4</OpenWigiSdkVersion>
     <OpenWigiSdkProject Condition="'$(OpenWigiSdkProject)' == ''">$(MSBuildThisFileDirectory)..\OpenWigiDashManager\src\OpenWigi.Sdk\OpenWigi.Sdk.csproj</OpenWigiSdkProject>
   </PropertyGroup>
 
@@ -41,7 +41,7 @@
     <ProjectReference Include="$(OpenWigiSdkProject)" Private="false" ExcludeAssets="runtime" />
   </ItemGroup>
   <ItemGroup Condition="'$(UseLocalOpenWigiSdk)' != 'true'">
-    <PackageReference Include="victorperez2911.OpenWigi.Sdk" Version="$(OpenWigiSdkVersion)" ExcludeAssets="runtime" />
+    <PackageReference Include="OpenWigiDash.Sdk" Version="$(OpenWigiSdkVersion)" ExcludeAssets="runtime" />
   </ItemGroup>
 
   <ItemGroup>
@@ -51,7 +51,7 @@
   </ItemGroup>
 
   <!-- Pelo pacote, o NuGet importa o .targets do SDK sozinho; pela referência de projeto, importamos à mão. -->
-  <Import Project="$([System.IO.Path]::GetDirectoryName($(OpenWigiSdkProject)))\build\victorperez2911.OpenWigi.Sdk.targets"
+  <Import Project="$([System.IO.Path]::GetDirectoryName($(OpenWigiSdkProject)))\build\OpenWigiDash.Sdk.targets"
           Condition="'$(UseLocalOpenWigiSdk)' == 'true'" />
 
   <ItemGroup>

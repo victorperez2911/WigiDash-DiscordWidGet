@@ -12,7 +12,7 @@ namespace WigiDash.DiscordWidget.Widgets;
 /// </summary>
 public abstract class DiscordWidgetBase : IWidget
 {
-    protected const string Website = "https://github.com/victorperez2911/WigiDash-DiscordWidGet";
+    protected const string Website = "https://github.com/OpenWigiDash/WigiDash-DiscordWidGet";
 
     private IWidgetHost? _host;
 
