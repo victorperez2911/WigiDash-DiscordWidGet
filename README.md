@@ -3,7 +3,8 @@
 Plugin com 15 widgets que controlam o Discord aberto no PC a partir do painel WigiDash da G.SKILL, no
 [OpenWigiDashManager](https://github.com/victorperez2911/OpenWigiDashManager) (.NET 10).
 
-Esta é a branch `net10`. A `main` guarda a tentativa antiga em net472, que parou no erro 4001 do WebSocket.
+A tentativa antiga em net472, que parou no erro 4001 do WebSocket, ficou guardada na branch
+[`legacy-net472`](https://github.com/victorperez2911/WigiDash-DiscordWidGet/tree/legacy-net472).
 
 ## Widgets
 
@@ -77,7 +78,7 @@ oficiais.
 
 ## Publicar uma versão
 
-Crie a tag `v<versão>` (ex.: `v2.0.0-preview.3`; a `v2.0.0-preview.2` é a primeira que saiu no nuget.org) no branch `net10`. O workflow `release.yml` roda os testes,
+Crie a tag `v<versão>` (ex.: `v2.0.0-preview.3`; a `v2.0.0-preview.2` é a primeira que saiu no nuget.org) na `main`. O workflow `release.yml` roda os testes,
 publica o pacote no nuget.org por Trusted Publishing e anexa o zip à release do GitHub. Enquanto o SDK for
 preview, a versão do plugin também precisa ser preview.
 

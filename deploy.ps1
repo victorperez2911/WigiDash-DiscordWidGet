@@ -1,6 +1,6 @@
-# OpenWigiDash Widget Development - Deploy Script (branch net10)
+# OpenWigiDash Widget Development - Deploy Script (branch main)
 # Build e deploy do widget Discord para o OpenWigiDashManager.
-# A main guarda a tentativa net472 (parada no erro 4001 do WebSocket).
+# A branch legacy-net472 guarda a tentativa net472 (parada no erro 4001 do WebSocket).
 
 param(
     [string]$Configuration = "Debug",

@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk.Razor">
 
-  <!-- Versão .NET 10 para o OpenWigiDashManager (branch net10). A main guarda a tentativa net472, que
+  <!-- Versão .NET 10 para o OpenWigiDashManager (branch main). A branch legacy-net472 guarda a tentativa net472, que
        parou no erro 4001 do WebSocket; esta fala com o Discord pelo named pipe discord-ipc-N. -->
   <PropertyGroup>
     <TargetFramework>net10.0-windows</TargetFramework>
