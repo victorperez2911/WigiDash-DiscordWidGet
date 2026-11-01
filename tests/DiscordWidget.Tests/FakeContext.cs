@@ -13,7 +13,9 @@ internal sealed class FakeContext(WidgetSize size) : IWidgetContext
     public Guid InstanceId { get; } = Guid.NewGuid();
     public IWidgetHost Host { get; } = new FakeHost();
     public WidgetSize Size { get; } = size;
-    public PixelSize PixelSize => Size.PixelSize;
+    /// <summary>Área de conteúdo com a moldura padrão da página (no SDK 3.0, sem respiro nem borda).</summary>
+    public PixelSize PixelSize => Frame.ContentSize(Size.CellSpan);
+    public TileFrame Frame { get; } = TileFrame.Default;
     public bool IsFullscreen => false;
     public bool IsAsleep => false;
     public WidgetTheme Theme { get; } = new();

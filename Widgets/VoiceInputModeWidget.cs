@@ -14,7 +14,8 @@ public sealed class VoiceInputModeWidget : DiscordWidgetBase
     public override WidgetManifest Manifest { get; } = CreateManifest(
         new Guid("8f9881f9-2671-4acf-a4b1-26d74be5f64c"),
         "Discord: Voice Input Mode",
-        "Toque alterna o modo de entrada de voz do Discord entre detecção de voz e push to talk.");
+        "Toque alterna o modo de entrada de voz do Discord entre detecção de voz e push to talk.",
+        iconButton: true);
 
     protected override ButtonVisual Preview => new(Glyphs.Switch, "Modo de voz");
 

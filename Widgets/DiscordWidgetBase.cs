@@ -37,19 +37,23 @@ public abstract class DiscordWidgetBase : IWidget
         return instance;
     }
 
-    public ValueTask<WidgetFrame?> GetPreviewAsync(WidgetSize size, CancellationToken cancellationToken) =>
-        ValueTask.FromResult<WidgetFrame?>(ButtonRenderer.Render(size.PixelSize, _host?.Theme ?? new WidgetTheme(), Preview));
+    public ValueTask<WidgetFrame?> GetPreviewAsync(WidgetSize size, PixelSize pixelSize, CancellationToken cancellationToken) =>
+        ValueTask.FromResult<WidgetFrame?>(ButtonRenderer.Render(pixelSize, _host?.Theme ?? new WidgetTheme(), Preview));
 
-    /// <summary>Ficha padrão: botão de 1x1 ou 2x1, versão do plugin.</summary>
-    protected static WidgetManifest CreateManifest(Guid id, string name, string description) => new()
+    /// <summary>
+    /// Ficha padrão: Small (o 1x1 de antes) e Wide (o 2x1). <paramref name="iconButton"/> acrescenta o Mini (meia
+    /// célula, 98x70), que só serve para botão de ícone (mute, microfone); widget com texto, lista ou canal começa
+    /// no Small (decisão do Victor para o SDK 3.0).
+    /// </summary>
+    protected static WidgetManifest CreateManifest(Guid id, string name, string description, bool iconButton = false) => new()
     {
         Id = id,
         Name = name,
-        Version = typeof(DiscordWidgetBase).Assembly.GetName().Version ?? new Version(2, 0, 0),
+        Version = typeof(DiscordWidgetBase).Assembly.GetName().Version ?? new Version(3, 0, 0),
         Author = "Victor Perez",
         Website = Website,
         Description = description,
-        SupportedSizes = [WidgetSize.Small, WidgetSize.Wide],
+        SupportedSizes = iconButton ? [WidgetSize.Mini, WidgetSize.Small, WidgetSize.Wide] : [WidgetSize.Small, WidgetSize.Wide],
     };
 }
 
@@ -253,6 +257,12 @@ public abstract class DiscordButtonInstance : IWidgetInstance
     }
 
     private void OnSessionChanged() => Refresh();
+
+    /// <summary>
+    /// A moldura da página mudou ou o widget mudou de linha: o próximo <see cref="RenderAsync"/> já desenha em
+    /// <see cref="IWidgetContext.PixelSize"/> novo, então não há cache a refazer.
+    /// </summary>
+    public virtual ValueTask OnSizeChangedAsync(PixelSize pixelSize, CancellationToken cancellationToken) => ValueTask.CompletedTask;
 
     public virtual ValueTask OnSleepAsync(CancellationToken cancellationToken) => ValueTask.CompletedTask;
 

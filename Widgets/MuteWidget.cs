@@ -13,7 +13,8 @@ public sealed class MuteWidget : DiscordWidgetBase
     public override WidgetManifest Manifest { get; } = CreateManifest(
         new Guid("c0488238-0f38-442d-945e-2df310e0f93a"),
         "Discord: Mute",
-        "Toque liga e desliga o microfone no Discord. Fica vermelho quando está mutado.");
+        "Toque liga e desliga o microfone no Discord. Fica vermelho quando está mutado.",
+        iconButton: true);
 
     protected override ButtonVisual Preview => new(Glyphs.Microphone, "Mute");
 

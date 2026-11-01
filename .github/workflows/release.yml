@@ -1,6 +1,6 @@
 name: Release Widget (OpenWigiDash)
 
-# Branch main: versões 2.x para o OpenWigiDashManager. Uma tag v2* (ex.: v2.0.0-preview.1) gera:
+# Branch main: versões 2.x e 3.x para o OpenWigiDashManager. Uma tag v2* ou v3* (ex.: v3.0.0-preview.1) gera:
 # - o pacote de plugin no nuget.org (OpenWigiDash.Discord), que o Manager instala;
 # - o zip na release do GitHub, para quem instala à mão.
 # A versão do pacote é a da tag sem o "v". Publica por Trusted Publishing (sem chave guardada):
@@ -13,10 +13,11 @@ on:
   push:
     tags:
       - 'v2*'
+      - 'v3*'
   workflow_dispatch:
     inputs:
       version:
-        description: 'Versão SemVer sem o "v" (ex.: 2.0.0-preview.4). Preview enquanto o SDK for preview.'
+        description: 'Versão SemVer sem o "v" (ex.: 3.0.0-preview.1). Preview enquanto o SDK for preview.'
         required: true
 
 permissions:

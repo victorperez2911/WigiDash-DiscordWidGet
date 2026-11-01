@@ -226,12 +226,12 @@ public sealed class ChannelAudioWidgetTests : IAsyncLifetime
         Assert.Equal(90, _outputVolume);
 
         // Sem "até 200%", a saída para em 100%.
-        await Tap(widget, x: WidgetSize.Wide.PixelSize.Width - 10);
-        await Tap(widget, x: WidgetSize.Wide.PixelSize.Width - 10);
+        await Tap(widget, x: TileFrame.Default.ContentSize(WidgetSize.Wide.CellSpan).Width - 10);
+        await Tap(widget, x: TileFrame.Default.ContentSize(WidgetSize.Wide.CellSpan).Width - 10);
         Assert.Equal(100, _outputVolume);
 
         await widget.SaveOptionsAsync(widget.Options with { AllowBoost = true });
-        await Tap(widget, x: WidgetSize.Wide.PixelSize.Width - 10);
+        await Tap(widget, x: TileFrame.Default.ContentSize(WidgetSize.Wide.CellSpan).Width - 10);
         Assert.Equal(110, _outputVolume);
         Assert.Equal("110%", widget.CurrentVisual().Label);
         Assert.Equal(AdjustHints.Horizontal, widget.CurrentVisual().Hints);
@@ -244,7 +244,7 @@ public sealed class ChannelAudioWidgetTests : IAsyncLifetime
         await using var widget = await CreateAsync<VolumeControlInstance>(new VolumeControlWidget());
         await widget.SaveOptionsAsync(new VolumeOptions { Side = AudioSide.Output, Step = 10 });
 
-        await widget.OnTouchAsync(new TouchEvent(TouchKind.Tap, WidgetSize.Small.PixelSize.Width - 10, 60, TimeSpan.Zero), CancellationToken.None);
+        await widget.OnTouchAsync(new TouchEvent(TouchKind.Tap, TileFrame.Default.ContentSize(WidgetSize.Small.CellSpan).Width - 10, 60, TimeSpan.Zero), CancellationToken.None);
         Assert.Equal(60, _outputVolume);
 
         await widget.OnTouchAsync(new TouchEvent(TouchKind.Tap, 10, 60, TimeSpan.Zero), CancellationToken.None);

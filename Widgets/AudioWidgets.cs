@@ -35,20 +35,20 @@ internal static class VolumeTouch
     /// Quanto o toque soma ao volume: metade esquerda abaixa e a direita aumenta (o tile desenha o "−" e o "+"
     /// dos lados do ícone); swipe para cima/baixo também.
     /// </summary>
-    public static int? Delta(TouchEvent touch, WidgetSize size, int step)
+    public static int? Delta(TouchEvent touch, PixelSize size, int step)
     {
         var magnitude = Math.Abs(step);
         return touch.Kind switch
         {
             TouchKind.SwipeUp => magnitude,
             TouchKind.SwipeDown => -magnitude,
-            TouchKind.Tap => touch.X < size.PixelSize.Width / 2 ? -magnitude : magnitude,
+            TouchKind.Tap => touch.X < size.Width / 2 ? -magnitude : magnitude,
             _ => null,
         };
     }
 
     /// <summary>"−" e "+" dos lados do ícone, em qualquer tamanho.</summary>
-    public static AdjustHints Hints(WidgetSize size) => AdjustHints.Horizontal;
+    public static AdjustHints Hints => AdjustHints.Horizontal;
 }
 
 public sealed record AudioDeviceOptions
@@ -159,7 +159,7 @@ public sealed class VolumeControlInstance(IWidgetContext context) : DiscordOptio
         {
             Detail = Options.Action == VolumeAction.Set ? $"{Label}: {Options.Value}%" : Label,
             Level = volume / Max,
-            Hints = Options.Action == VolumeAction.Set ? AdjustHints.None : VolumeTouch.Hints(Context.Size),
+            Hints = Options.Action == VolumeAction.Set ? AdjustHints.None : VolumeTouch.Hints,
         };
     }
 
@@ -171,7 +171,7 @@ public sealed class VolumeControlInstance(IWidgetContext context) : DiscordOptio
         double target;
         if (Options.Action == VolumeAction.Set && touch.Kind == TouchKind.Tap)
             target = Options.Value;
-        else if (VolumeTouch.Delta(touch, Context.Size, Options.Action == VolumeAction.Set ? 10 : Options.Step) is { } delta)
+        else if (VolumeTouch.Delta(touch, Context.PixelSize, Options.Action == VolumeAction.Set ? 10 : Options.Step) is { } delta)
             target = current + delta;
         else
             return;
@@ -227,7 +227,7 @@ public sealed class UserVolumeInstance(IWidgetContext context) : DiscordOptionsI
         {
             Detail = $"{Math.Round(user.Volume)}%",
             Level = user.Volume / 200,
-            Hints = Options.Action == VolumeAction.Adjust ? VolumeTouch.Hints(Context.Size) : AdjustHints.None,
+            Hints = Options.Action == VolumeAction.Adjust ? VolumeTouch.Hints : AdjustHints.None,
             Faces = [new AvatarFace(user.AvatarUrl, user.Name, Session.IsSpeaking(user.Id))],
         };
     }
@@ -252,7 +252,7 @@ public sealed class UserVolumeInstance(IWidgetContext context) : DiscordOptionsI
                 break;
             default:
                 var step = Options.Action == VolumeAction.Adjust ? Options.Step : 10;
-                if (VolumeTouch.Delta(touch, Context.Size, step) is { } delta)
+                if (VolumeTouch.Delta(touch, Context.PixelSize, step) is { } delta)
                     await Session.SetUserVoiceSettingsAsync(user.Id, user.Volume + delta, null, cancellationToken).ConfigureAwait(false);
                 break;
         }

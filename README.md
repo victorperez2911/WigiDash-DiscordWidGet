@@ -84,7 +84,7 @@ preview, a versão do plugin também precisa ser preview.
 
 ## Desenvolvimento
 
-Precisa do SDK do .NET 10. O contrato dos widgets é o pacote `OpenWigiDash.Sdk` (2.0.0-preview.4);
+Precisa do SDK do .NET 10. O contrato dos widgets é o pacote `OpenWigiDash.Sdk` (3.0.0-preview.1);
 a referência para autores de plugins é o
 [docs/sdk.md](https://github.com/OpenWigiDash/OpenWigiDashManager/blob/main/docs/sdk.md) do OpenWigiDashManager.
 

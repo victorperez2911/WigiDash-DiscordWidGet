@@ -29,7 +29,8 @@ public sealed class SoundboardWidget : DiscordWidgetBase
     public override WidgetManifest Manifest { get; } = CreateManifest(
         new Guid("ac4d6e7c-a5d1-4403-86ca-98908c57b0a9"),
         "Discord: Soundboard",
-        "Toque toca o som escolhido do soundboard na call em que você está.");
+        "Toque toca o som escolhido do soundboard na call em que você está.",
+        iconButton: true);
 
     protected override ButtonVisual Preview => new(Glyphs.Music, "Soundboard");
 
@@ -302,7 +303,8 @@ public sealed class VideoToggleWidget : DiscordWidgetBase
     public override WidgetManifest Manifest { get; } = CreateManifest(
         new Guid("e4e6df7a-a54e-468e-8fbd-7210d4cc4feb"),
         "Discord: Video Toggle",
-        "Toque liga e desliga a câmera na call do Discord.");
+        "Toque liga e desliga a câmera na call do Discord.",
+        iconButton: true);
 
     protected override ButtonVisual Preview => new(Glyphs.Video, "Câmera");
 
@@ -315,7 +317,8 @@ public sealed class StreamToggleWidget : DiscordWidgetBase
     public override WidgetManifest Manifest { get; } = CreateManifest(
         new Guid("5211b265-238c-4f0b-98ea-c31aff35d73f"),
         "Discord: Stream Toggle",
-        "Toque liga e desliga a transmissão de tela na call do Discord.");
+        "Toque liga e desliga a transmissão de tela na call do Discord.",
+        iconButton: true);
 
     protected override ButtonVisual Preview => new(Glyphs.Share, "Transmitir");
 
