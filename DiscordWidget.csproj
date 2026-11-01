@@ -20,7 +20,8 @@
   <PropertyGroup>
     <OpenWigiDashPlugin>true</OpenWigiDashPlugin>
     <PackageId>victorperez2911.OpenWigiDash.Discord</PackageId>
-    <Version>2.0.0-preview.1</Version>
+    <Title>Discord</Title>
+    <Version>2.0.0-preview.3</Version>
     <PackageTags>discord</PackageTags>
     <PackageProjectUrl>https://github.com/victorperez2911/WigiDash-DiscordWidGet</PackageProjectUrl>
     <RepositoryUrl>https://github.com/victorperez2911/WigiDash-DiscordWidGet</RepositoryUrl>
