@@ -1,10 +1,10 @@
 name: CI
 
-# Build e testes em cada PR para o net10 (e nos PRs empilhados em cima dele).
+# Build e testes em cada PR e em cada push na main.
 on:
   pull_request:
   push:
-    branches: [net10]
+    branches: [main]
 
 jobs:
   test:
