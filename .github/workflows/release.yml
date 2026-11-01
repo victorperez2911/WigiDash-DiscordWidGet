@@ -47,7 +47,7 @@ jobs:
       run: |
         if ('${{ github.event_name }}' -eq 'workflow_dispatch') {
           $version = $env:INPUT_VERSION.Trim() -replace '^v', ''
-          if ($version -notmatch '^2\.\d+\.\d+(-[0-9A-Za-z.-]+)?$') { throw "Versão inválida: $version" }
+          if ($version -notmatch '^[23]\.\d+\.\d+(-[0-9A-Za-z.-]+)?$') { throw "Versão inválida: $version" }
         } else {
           $version = '${{ github.ref_name }}' -replace '^v', ''
         }
