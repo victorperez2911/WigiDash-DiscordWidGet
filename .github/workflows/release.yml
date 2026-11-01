@@ -5,10 +5,19 @@ name: Release Widget (OpenWigiDash)
 # - o zip na release do GitHub, para quem instala à mão.
 # A versão do pacote é a da tag sem o "v". Publica por Trusted Publishing (sem chave guardada):
 # a política no nuget.org aponta para este repositório e este workflow, e vars.NUGET_USER é o usuário.
+#
+# Também roda à mão (Actions > Release Widget > Run workflow, na main) com a versão sem o "v": publica do
+# commit escolhido e a release cria a tag v<versão> nele. Assim a publicação não depende de alguém
+# empurrar a tag (as threads do Claude não podem).
 on:
   push:
     tags:
       - 'v2*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Versão SemVer sem o "v" (ex.: 2.0.0-preview.4). Preview enquanto o SDK for preview.'
+        required: true
 
 permissions:
   contents: write
@@ -32,9 +41,17 @@ jobs:
 
     - name: Version
       shell: pwsh
+      env:
+        INPUT_VERSION: ${{ inputs.version }}
       run: |
-        $version = "${{ github.ref_name }}".TrimStart('v')
+        if ('${{ github.event_name }}' -eq 'workflow_dispatch') {
+          $version = $env:INPUT_VERSION.Trim() -replace '^v', ''
+          if ($version -notmatch '^2\.\d+\.\d+(-[0-9A-Za-z.-]+)?$') { throw "Versão inválida: $version" }
+        } else {
+          $version = '${{ github.ref_name }}' -replace '^v', ''
+        }
         echo "PACKAGE_VERSION=$version" >> $env:GITHUB_ENV
+        echo "TAG=v$version" >> $env:GITHUB_ENV
 
     - name: Test
       run: dotnet test tests/DiscordWidget.Tests -c ${{ env.CONFIGURATION }}
@@ -48,7 +65,7 @@ jobs:
     - name: Zip
       shell: pwsh
       run: |
-        $zipName = "OpenWigiDash-DiscordWidget-${{ github.ref_name }}.zip"
+        $zipName = "OpenWigiDash-DiscordWidget-${{ env.TAG }}.zip"
         Get-ChildItem "dist\${{ env.WIDGET_NAME }}" | ForEach-Object { Write-Host "  - $($_.Name)" }
         Compress-Archive -Path "dist\${{ env.WIDGET_NAME }}" -DestinationPath $zipName
         echo "ZIP_NAME=$zipName" >> $env:GITHUB_ENV
@@ -71,6 +88,8 @@ jobs:
     - name: Create Release
       uses: softprops/action-gh-release@v2
       with:
+        tag_name: ${{ env.TAG }}
+        target_commitish: ${{ github.sha }}
         files: ${{ env.ZIP_NAME }}
         generate_release_notes: true
-        prerelease: ${{ contains(github.ref_name, '-') }}
+        prerelease: ${{ contains(env.PACKAGE_VERSION, '-') }}
