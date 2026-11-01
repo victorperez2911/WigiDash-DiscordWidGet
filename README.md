@@ -52,28 +52,50 @@ só são liberados para o dono do app e para quem está no time dele.
    o Client ID.
 4. Clique em **Autorizar no Discord** (ou toque no widget) e confirme no popup.
 
+## Requisitos
+
+- Windows 10 ou 11 com o Discord para desktop aberto.
+- [OpenWigiDashManager](https://github.com/victorperez2911/OpenWigiDashManager) instalado pelo
+  `OpenWigiDash-Setup.exe` da [release](https://github.com/victorperez2911/OpenWigiDashManager/releases) dele.
+  O instalador já traz o .NET 10 que o manager usa.
+- O aparelho WigiDash é opcional: sem ele, ligue o **WigiDash virtual** em **Ajustes > Aparelho ativo** do
+  manager e use os widgets pela prévia, com o mouse no lugar do dedo.
+
 ## Instalação
 
-O plugin é publicado no nuget.org como `victorperez2911.OpenWigiDash.Discord` (pacote do tipo
-`OpenWigiDashPlugin`), e o OpenWigiDashManager instala por lá.
+O plugin é um pacote do nuget.org, `victorperez2911.OpenWigiDash.Discord` (tipo `OpenWigiDashPlugin`). A loja
+de plugins dentro do manager ([OpenWigiDashManager#47](https://github.com/victorperez2911/OpenWigiDashManager/issues/47))
+e o `owd plugin` ([#46](https://github.com/victorperez2911/OpenWigiDashManager/issues/46)), que vão instalar a
+partir de lá, ainda estão planejados. Por enquanto:
 
-Para instalar à mão, baixe o zip da última [release](https://github.com/victorperez2911/WigiDash-DiscordWidGet/releases) e
-extraia a pasta `DiscordWidget` em `%LOCALAPPDATA%\OpenWigiDash\Widgets\`. Feche o manager pela bandeja antes
-de trocar a DLL.
+1. Baixe o zip da última [release](https://github.com/victorperez2911/WigiDash-DiscordWidGet/releases).
+2. Feche o manager pela bandeja.
+3. Extraia a pasta `DiscordWidget` em `%LOCALAPPDATA%\OpenWigiDash\Widgets\` e abra o manager de novo.
+
+O ícone do pacote (`icon.png`) é o logo do Discord com o selo do OpenWigiDash no canto, o padrão dos plugins
+oficiais.
 
 ## Publicar uma versão
 
-Crie a tag `v<versão>` (ex.: `v2.0.0-preview.2`) no branch `net10`. O workflow `release.yml` roda os testes,
+Crie a tag `v<versão>` (ex.: `v2.0.0-preview.3`; a `v2.0.0-preview.2` é a primeira que saiu no nuget.org) no branch `net10`. O workflow `release.yml` roda os testes,
 publica o pacote no nuget.org por Trusted Publishing e anexa o zip à release do GitHub. Enquanto o SDK for
 preview, a versão do plugin também precisa ser preview.
 
 ## Desenvolvimento
+
+Precisa do SDK do .NET 10. O contrato dos widgets é o pacote `victorperez2911.OpenWigi.Sdk` (2.0.0-preview.3);
+a referência para autores de plugins é o
+[docs/sdk.md](https://github.com/victorperez2911/OpenWigiDashManager/blob/main/docs/sdk.md) do OpenWigiDashManager.
 
 ```powershell
 dotnet test tests/DiscordWidget.Tests     # testes contra um Discord simulado no pipe
 .\deploy.ps1 -RestartManager              # build e cópia para a pasta de widgets do usuário
 dotnet pack -c Release                    # gera o pacote de plugin (.nupkg)
 ```
+
+Não precisa do aparelho para desenvolver: com o WigiDash virtual ligado no manager (Ajustes > Aparelho ativo),
+o `deploy.ps1 -RestartManager` reabre o manager no tray; abra a janela, adicione os widgets e use "Destacar
+prévia", onde o mouse vira toque (clicar dá tap, segurar dá long-press). Os testes também não precisam do Discord aberto.
 
 Para testar contra o SDK local em vez do pacote do nuget.org, compile com `-p:UseLocalOpenWigiSdk=true` e o
 repositório OpenWigiDashManager clonado ao lado deste.
